@@ -5,16 +5,25 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.automirrored.filled.MenuBook
@@ -22,9 +31,12 @@ import androidx.compose.material.icons.automirrored.outlined.MenuBook
 import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.SportsEsports
+import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.material.icons.outlined.Memory
 import androidx.compose.material.icons.outlined.Speed
 import androidx.compose.material.icons.outlined.SportsEsports
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -35,6 +47,7 @@ import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.NavigationRail
 import androidx.compose.material3.NavigationRailItem
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
@@ -46,6 +59,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
@@ -68,11 +82,13 @@ import com.example.ui.screens.ArenaScreen
 import com.example.ui.screens.AuthScreen
 import com.example.ui.screens.MemoryVaultScreen
 import com.example.ui.screens.ResearchLabScreen
+import com.example.ui.theme.BorderSubtle
 import com.example.ui.theme.ElectricCyan
 import com.example.ui.theme.MyApplicationTheme
 import com.example.ui.theme.ObsidianBackground
 import com.example.ui.theme.SlateSurface
 import com.google.firebase.Firebase
+import com.google.firebase.FirebaseApp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.auth
 import com.google.firebase.firestore.FirebaseFirestore
@@ -109,8 +125,22 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun AppNavigation(auth: FirebaseAuth = Firebase.auth) {
-    val currentUser by auth.authStateFlow().collectAsStateWithLifecycle(initialValue = auth.currentUser)
+fun AppNavigation() {
+    val context = LocalContext.current
+    val firebaseAuth: FirebaseAuth? = remember(context) {
+        if (FirebaseApp.getApps(context).isNotEmpty()) {
+            runCatching { Firebase.auth }.getOrNull()
+        } else {
+            null
+        }
+    }
+
+    if (firebaseAuth == null) {
+        FirebaseSetupRequiredScreen(packageName = context.packageName)
+        return
+    }
+
+    val currentUser by firebaseAuth.authStateFlow().collectAsStateWithLifecycle(initialValue = firebaseAuth.currentUser)
     val user = currentUser
 
     if (user == null) {
@@ -122,6 +152,72 @@ fun AppNavigation(auth: FirebaseAuth = Firebase.auth) {
                 currentUserId = uid,
                 userEmail = user.email ?: "Operator"
             )
+        }
+    }
+}
+
+@Composable
+private fun FirebaseSetupRequiredScreen(packageName: String) {
+    Surface(
+        modifier = Modifier.fillMaxSize(),
+        color = ObsidianBackground
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .windowInsetsPadding(WindowInsets.safeDrawing)
+                .verticalScroll(rememberScrollState())
+                .padding(24.dp)
+                .widthIn(max = 560.dp),
+            verticalArrangement = Arrangement.Center,
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Card(
+                colors = CardDefaults.cardColors(containerColor = SlateSurface),
+                border = BorderStroke(1.dp, BorderSubtle),
+                shape = RoundedCornerShape(20.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("firebase_setup_required_card")
+            ) {
+                Column(modifier = Modifier.padding(20.dp)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.WarningAmber,
+                            contentDescription = "Configuration required",
+                            tint = ElectricCyan,
+                            modifier = Modifier.size(28.dp)
+                        )
+                        Text(
+                            text = "Firebase Config Missing",
+                            style = MaterialTheme.typography.headlineSmall,
+                            color = ElectricCyan
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Text(
+                        text = "This APK was compiled without app/google-services.json, so Firebase Auth, Firestore Memory, and Gemini AI Logic could not initialize.",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    Text(
+                        text = "To build a working APK on GitHub Actions:\n" +
+                            "1. Copy app/google-services.json from AI Studio into GitHub Repo Settings -> Secrets -> Actions as GOOGLE_SERVICES_JSON (or commit app/google-services.json).\n" +
+                            "2. Copy debug.keystore.base64 into a DEBUG_KEYSTORE_BASE64 secret so Google Sign-In SHA-1 matches ($packageName).\n" +
+                            "3. Re-run the Build Android APK workflow and install the new APK.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
         }
     }
 }
