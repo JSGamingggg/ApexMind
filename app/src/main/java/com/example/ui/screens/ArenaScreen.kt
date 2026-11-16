@@ -1,6 +1,15 @@
 package com.example.ui.screens
 
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.MutableTransitionState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -49,6 +58,10 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -71,6 +84,9 @@ import com.example.engine.Matrix2048State
 import com.example.engine.TacticalGridState
 import com.example.ui.AiTaskState
 import com.example.ui.ApexMindViewModel
+import com.example.ui.ResearchModalState
+import com.example.ui.components.GameStrategyDashboard
+import com.example.ui.components.ResearchLabModal
 import com.example.ui.theme.AmberWarning
 import com.example.ui.theme.BorderSubtle
 import com.example.ui.theme.CoralMistake
@@ -97,7 +113,9 @@ fun ArenaScreen(
     val decisionLog by viewModel.decisionLog.collectAsStateWithLifecycle()
     val liveAdvice by viewModel.liveAdvice.collectAsStateWithLifecycle()
     val aiTaskState by viewModel.aiTaskState.collectAsStateWithLifecycle()
+    val researchModalState by viewModel.researchModalState.collectAsStateWithLifecycle()
     val statusBanner by viewModel.statusBanner.collectAsStateWithLifecycle()
+    var showResearchModal by rememberSaveable { mutableStateOf(false) }
 
     val tacticalState by viewModel.tacticalGridState.collectAsStateWithLifecycle()
     val matrix2048State by viewModel.matrix2048State.collectAsStateWithLifecycle()
@@ -301,6 +319,60 @@ fun ArenaScreen(
                     }
                 }
                 AiTaskState.Idle -> Unit
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // Game Strategy Dashboard (Current Target + Live Firestore Strategic Objectives)
+            val dashboardVisibilityState = remember {
+                MutableTransitionState(false).apply { targetState = true }
+            }
+            AnimatedVisibility(
+                visibleState = dashboardVisibilityState,
+                enter = fadeIn(animationSpec = tween(240)) +
+                    expandVertically(
+                        animationSpec = tween(260, easing = FastOutSlowInEasing),
+                        expandFrom = Alignment.Top
+                    ),
+                exit = fadeOut(animationSpec = tween(180)) +
+                    shrinkVertically(
+                        animationSpec = tween(200, easing = FastOutSlowInEasing),
+                        shrinkTowards = Alignment.Top
+                    )
+            ) {
+                AnimatedContent(
+                    targetState = selectedGame,
+                    transitionSpec = {
+                        (fadeIn(animationSpec = tween(220)) +
+                            expandVertically(
+                                animationSpec = tween(240, easing = FastOutSlowInEasing),
+                                expandFrom = Alignment.Top
+                            )) togetherWith
+                            (fadeOut(animationSpec = tween(180)) +
+                                shrinkVertically(
+                                    animationSpec = tween(180, easing = FastOutSlowInEasing),
+                                    shrinkTowards = Alignment.Top
+                                ))
+                    },
+                    label = "arena_strategy_dashboard_game_transition"
+                ) { targetGame ->
+                    val targetProfile = profiles.firstOrNull { it.gameId == targetGame.id } ?: GameProfile(
+                        gameId = targetGame.id,
+                        difficultyLevel = 2L
+                    )
+                    GameStrategyDashboard(
+                        selectedGame = targetGame,
+                        profile = targetProfile,
+                        researchDocs = researchDocs,
+                        onToggleObjective = { objective ->
+                            viewModel.toggleStrategicObjective(targetGame, objective)
+                        },
+                        onNavigateToResearch = {
+                            viewModel.resetResearchModalState()
+                            showResearchModal = true
+                        }
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.height(12.dp))
@@ -584,6 +656,30 @@ fun ArenaScreen(
 
             Spacer(modifier = Modifier.height(24.dp))
         }
+    }
+
+    if (showResearchModal) {
+        ResearchLabModal(
+            selectedGame = selectedGame,
+            modalState = researchModalState,
+            onFetchStrategy = { gameTitle, externalSource, sourceType ->
+                viewModel.fetchExternalStrategyViaGemini(
+                    game = selectedGame,
+                    gameTitle = gameTitle,
+                    externalSource = externalSource,
+                    sourceType = sourceType
+                )
+            },
+            onOpenFullLab = {
+                showResearchModal = false
+                viewModel.resetResearchModalState()
+                onNavigateToResearch()
+            },
+            onDismiss = {
+                showResearchModal = false
+                viewModel.resetResearchModalState()
+            }
+        )
     }
 }
 

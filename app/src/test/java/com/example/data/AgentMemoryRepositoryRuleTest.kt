@@ -46,6 +46,21 @@ class AgentMemoryRepositoryRuleTest : FirestoreEmulatorTestBase() {
         val fetched = emittedProfiles.first { it.gameId == "neural_2048" }
         assertEquals(4L, fetched.difficultyLevel)
         assertEquals(8L, fetched.totalWins)
+
+        val toggledResult = withTimeout(DEFAULT_TIMEOUT_MS) {
+            repository.toggleStrategicObjective(
+                gameId = "neural_2048",
+                objectiveText = "Maintain corner lock",
+                baseProfile = fetched
+            )
+        }
+        assertTrue("Expected toggleStrategicObjective to succeed: ${toggledResult.exceptionOrNull()}", toggledResult.isSuccess)
+        val updatedProfiles = withTimeout(FLOW_TIMEOUT_MS) {
+            repository.observeGameProfiles().first { list ->
+                list.firstOrNull { it.gameId == "neural_2048" }?.completedObjectives?.contains("Maintain corner lock") == true
+            }
+        }
+        assertTrue(updatedProfiles.first { it.gameId == "neural_2048" }.completedObjectives.contains("Maintain corner lock"))
     }
 
     @Test

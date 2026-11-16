@@ -48,6 +48,7 @@ service cloud.firestore {
              data.lookaheadWeight is int && data.lookaheadWeight >= 0 && data.lookaheadWeight <= 100 &&
              data.trapAwarenessWeight is int && data.trapAwarenessWeight >= 0 && data.trapAwarenessWeight <= 100 &&
              data.lastAdjustmentReason is string && data.lastAdjustmentReason.size() >= 1 && data.lastAdjustmentReason.size() <= 500 &&
+             (!('completedObjectives' in data.keys()) || (data.completedObjectives is list && data.completedObjectives.size() <= 50 && (data.completedObjectives.size() == 0 || (data.completedObjectives[0] is string && data.completedObjectives[0].size() <= 300)))) &&
              data.createdAt is timestamp && data.createdAt <= request.time &&
              data.updatedAt is timestamp && data.updatedAt <= request.time;
     }
@@ -124,7 +125,8 @@ service cloud.firestore {
                          'userId', 'gameId', 'difficultyLevel', 'autoAdjustDifficulty',
                          'targetWinRate', 'totalWins', 'totalLosses', 'recentOutcomes',
                          'bestScore', 'aggressionWeight', 'defenseWeight', 'lookaheadWeight',
-                         'trapAwarenessWeight', 'lastAdjustmentReason', 'createdAt', 'updatedAt'
+                         'trapAwarenessWeight', 'lastAdjustmentReason', 'completedObjectives',
+                         'createdAt', 'updatedAt'
                        ]) &&
                        isValidGameProfile(incoming(), userId, gameId);
 
@@ -139,7 +141,8 @@ service cloud.firestore {
                          'difficultyLevel', 'autoAdjustDifficulty', 'targetWinRate',
                          'totalWins', 'totalLosses', 'recentOutcomes', 'bestScore',
                          'aggressionWeight', 'defenseWeight', 'lookaheadWeight',
-                         'trapAwarenessWeight', 'lastAdjustmentReason', 'updatedAt'
+                         'trapAwarenessWeight', 'lastAdjustmentReason', 'completedObjectives',
+                         'updatedAt'
                        ]);
 
       allow delete: if isOwner(userId) && isValidId(userId) && isValidId(gameId);

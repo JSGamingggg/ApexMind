@@ -11,6 +11,7 @@ enum class GameType(
     val title: String,
     val subtitle: String,
     val genreTag: String,
+    val targetObjective: String,
     val rulesOverview: String
 ) {
     TACTICAL_GRID(
@@ -18,6 +19,7 @@ enum class GameType(
         title = "Tactical Grid",
         subtitle = "5x5 Territory & Hazard Control",
         genreTag = "TURN-BASED STRATEGY",
+        targetObjective = "Outscore Tactical Bot in 14 turns by fortifying adjacent energy nodes and avoiding EMP traps.",
         rulesOverview = "Capture high-energy nodes, fortify adjacent sectors for +2x synergy, and detect/avoid redEMP traps while outscoring the adaptive Tactical Bot within 16 turns."
     ),
     NEURAL_2048(
@@ -25,6 +27,7 @@ enum class GameType(
         title = "2048 Neural Matrix",
         subtitle = "4x4 Heuristic Tile Synthesis",
         genreTag = "COMBINATORIAL PUZZLE",
+        targetObjective = "Reach the 512+ milestone tile using corner-locking and monotonic merge chains.",
         rulesOverview = "Slide and merge matching power-of-two tiles across a 4x4 grid. Maintain corner-locking, row monotonicity, and open merge chains to reach the target milestone tile before the grid locks."
     ),
     CYBER_SNAKE(
@@ -32,6 +35,7 @@ enum class GameType(
         title = "Cyber Snake Arena",
         subtitle = "8x8 Autonomous Pathfinding & Survival",
         genreTag = "REAL-TIME NAVIGATION",
+        targetObjective = "Harvest 12+ data cores while preserving safe tail escape routes around firewalls.",
         rulesOverview = "Navigate an 8x8 cybernetic grid to harvest data cores while avoiding self-collision and dynamic firewall hazards that scale with difficulty."
     );
 
@@ -57,6 +61,7 @@ data class GameProfile(
     val lookaheadWeight: Long = 60L,
     val trapAwarenessWeight: Long = 65L,
     val lastAdjustmentReason: String = "Initial calibration at Tier 1 — awaiting match telemetry.",
+    val completedObjectives: List<String> = emptyList(),
     @ServerTimestamp val createdAt: Timestamp? = null,
     @ServerTimestamp val updatedAt: Timestamp? = null
 ) {
@@ -88,6 +93,7 @@ data class GameProfile(
         "lookaheadWeight" to lookaheadWeight.coerceIn(0L, 100L),
         "trapAwarenessWeight" to trapAwarenessWeight.coerceIn(0L, 100L),
         "lastAdjustmentReason" to lastAdjustmentReason.take(500).ifBlank { "Calibrated." },
+        "completedObjectives" to completedObjectives.map { it.take(300) }.distinct().take(50),
         "createdAt" to FieldValue.serverTimestamp(),
         "updatedAt" to FieldValue.serverTimestamp()
     )
@@ -105,6 +111,7 @@ data class GameProfile(
         "lookaheadWeight" to lookaheadWeight.coerceIn(0L, 100L),
         "trapAwarenessWeight" to trapAwarenessWeight.coerceIn(0L, 100L),
         "lastAdjustmentReason" to lastAdjustmentReason.take(500).ifBlank { "Calibrated." },
+        "completedObjectives" to completedObjectives.map { it.take(300) }.distinct().take(50),
         "updatedAt" to FieldValue.serverTimestamp()
     )
 }

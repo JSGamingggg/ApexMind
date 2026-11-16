@@ -26,6 +26,14 @@ data class ResearchSynthesisResult(
     val trapAwarenessBoost: Int
 )
 
+data class ExternalFetchSynthesis(
+    val resolvedSourceTitle: String,
+    val resolvedSourceType: String,
+    val fetchedExcerpt: String,
+    val fetchedFromWeb: Boolean,
+    val synthesis: ResearchSynthesisResult
+)
+
 data class LiveTacticalAdvice(
     val recommendedAction: String,
     val confidencePercent: Int,
@@ -43,7 +51,9 @@ data class PostMatchAutopsyResult(
     val trapAwarenessAdjustment: Int
 )
 
-class AiStrategyService {
+class AiStrategyService(
+    private val externalFetcher: ExternalStrategyFetcher = HttpExternalStrategyFetcher()
+) {
 
     private val researchSchema = Schema.obj(
         properties = mapOf(
@@ -149,14 +159,22 @@ class AiStrategyService {
             val json = JSONObject(jsonText)
 
             val objectivesArr = json.getJSONArray("keyObjectives")
-            val objectives = (0 until objectivesArr.length()).map { objectivesArr.getString(it) }
+            val objectives = (0 until objectivesArr.length())
+                .map { objectivesArr.getString(it).trim().take(290) }
+                .filter { it.isNotBlank() }
+                .take(10)
+                .ifEmpty { listOf("Achieve optimal winning score for ${game.title}") }
 
             val rulesArr = json.getJSONArray("tacticalRules")
-            val rules = (0 until rulesArr.length()).map { rulesArr.getString(it) }
+            val rules = (0 until rulesArr.length())
+                .map { rulesArr.getString(it).trim().take(290) }
+                .filter { it.isNotBlank() }
+                .take(10)
+                .ifEmpty { listOf("Prioritize high-value positions while avoiding hazard penalties.") }
 
             Result.success(
                 ResearchSynthesisResult(
-                    synthesizedSummary = json.getString("synthesizedSummary"),
+                    synthesizedSummary = json.getString("synthesizedSummary").trim().take(1950),
                     keyObjectives = objectives,
                     tacticalRules = rules,
                     aggressionBoost = json.optInt("aggressionBoost", 5).coerceIn(-25, 25),
@@ -173,6 +191,46 @@ class AiStrategyService {
         } catch (e: Exception) {
             Log.e(TAG, "Pre-game research synthesis failed", e)
             Result.failure(Exception(e.localizedMessage ?: "Failed to synthesize pre-game research."))
+        }
+    }
+
+    suspend fun fetchAndSynthesizeGameTitleStrategy(
+        targetGame: GameType,
+        gameTitleInput: String,
+        externalSourceInput: String,
+        sourceType: String,
+        currentProfile: GameProfile
+    ): Result<ExternalFetchSynthesis> {
+        val validSourceType = when (sourceType) {
+            "wiki", "strategy_guide", "video_transcript", "custom" -> sourceType
+            else -> "wiki"
+        }
+
+        val fetchedPayload = externalFetcher.fetchStrategyMaterial(
+            gameTitle = gameTitleInput,
+            externalSourceInput = externalSourceInput,
+            sourceType = validSourceType,
+            targetGame = targetGame
+        ).getOrElse { err ->
+            return Result.failure(err)
+        }
+
+        val synthesisResult = synthesizePreGameResearch(
+            game = targetGame,
+            sourceTitle = fetchedPayload.sourceTitle.take(150),
+            sourceType = validSourceType,
+            rawContent = fetchedPayload.excerpt.take(4900),
+            currentProfile = currentProfile
+        )
+
+        return synthesisResult.map { synthesis ->
+            ExternalFetchSynthesis(
+                resolvedSourceTitle = fetchedPayload.sourceTitle.take(150),
+                resolvedSourceType = validSourceType,
+                fetchedExcerpt = fetchedPayload.excerpt.take(4900),
+                fetchedFromWeb = fetchedPayload.fetchedFromWeb,
+                synthesis = synthesis
+            )
         }
     }
 

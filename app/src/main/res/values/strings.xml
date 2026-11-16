@@ -8,4 +8,20 @@
     <string name="nav_memory">Memory Vault</string>
     <string name="nav_adaptive">Adaptive Tier</string>
     <string name="hero_banner_desc">ApexMind Neural Observatory Command Deck</string>
+    <string name="strategy_dashboard_label">MISSION TARGET</string>
+    <string name="strategy_objectives_heading">STRATEGIC OBJECTIVES</string>
+    <string name="strategy_objectives_empty">No researched objectives stored in Firestore for this game yet.</string>
+    <string name="strategy_open_research_lab">Open Research Lab</string>
+    <string name="strategy_show_more">Show all objectives</string>
+    <string name="strategy_show_less">Show fewer objectives</string>
+    <string name="research_modal_title">RESEARCH LAB // GEMINI FETCH</string>
+    <string name="research_modal_game_title_label">Game Title</string>
+    <string name="research_modal_game_title_placeholder">Enter any game title (e.g. 2048, Chess, Tactical Grid)</string>
+    <string name="research_modal_source_label">External Source URL or Topic (Optional)</string>
+    <string name="research_modal_source_placeholder">https://en.wikipedia.org/wiki/... or leave blank for auto-lookup</string>
+    <string name="research_modal_fetch_button">FETCH VIA GEMINI</string>
+    <string name="research_modal_fetching">Fetching external strategy via Gemini...</string>
+    <string name="research_modal_done_button">DONE · VIEW IN DASHBOARD</string>
+    <string name="research_modal_open_full_lab">Open Full Lab</string>
+    <string name="research_modal_close_desc">Close Research Lab modal</string>
 </resources>

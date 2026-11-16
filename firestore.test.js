@@ -105,7 +105,14 @@ test("Authenticated owner: can create, read, list, and update own GameProfile", 
     docRef.update({
       difficultyLevel: 4,
       totalWins: 6,
+      completedObjectives: ["Keep highest tile locked in corner", "Maintain row monotonicity"],
       lastAdjustmentReason: "Win rate reached 75%, promoted to Tier 4.",
+      updatedAt: new Date(),
+    })
+  );
+  await assertFails(
+    docRef.update({
+      completedObjectives: "not_a_list",
       updatedAt: new Date(),
     })
   );

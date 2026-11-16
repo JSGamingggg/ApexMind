@@ -156,6 +156,30 @@ class AgentMemoryRepository(private val db: FirebaseFirestore) {
         }
     }
 
+    suspend fun toggleStrategicObjective(
+        gameId: String,
+        objectiveText: String,
+        baseProfile: GameProfile
+    ): Result<List<String>> {
+        val uid = requireUserId()
+        val normalizedObjective = objectiveText.trim().take(300)
+        if (normalizedObjective.isBlank()) {
+            return Result.success(baseProfile.completedObjectives)
+        }
+        val currentList = baseProfile.completedObjectives
+        val updatedList = if (normalizedObjective in currentList) {
+            currentList.filterNot { it == normalizedObjective }
+        } else {
+            (currentList + normalizedObjective).distinct().take(50)
+        }
+        val updatedProfile = baseProfile.copy(
+            userId = uid,
+            gameId = gameId,
+            completedObjectives = updatedList
+        )
+        return saveOrUpdateGameProfile(updatedProfile).map { updatedList }
+    }
+
     suspend fun getGameProfileByUser(ownerUid: String, gameId: String): Result<GameProfile?> {
         val docRef = db.collection("users").document(ownerUid).collection("game_profiles").document(gameId)
         return try {

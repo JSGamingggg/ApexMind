@@ -41,6 +41,18 @@ sealed interface AiTaskState {
     data class Error(val errorMessage: String) : AiTaskState
 }
 
+sealed interface ResearchModalState {
+    data object Idle : ResearchModalState
+    data class Fetching(val statusMessage: String) : ResearchModalState
+    data class Success(
+        val sourceTitle: String,
+        val summary: String,
+        val extractedObjectives: List<String>,
+        val fetchedFromWeb: Boolean
+    ) : ResearchModalState
+    data class Error(val message: String) : ResearchModalState
+}
+
 class ApexMindViewModel(
     private val repository: AgentMemoryRepository,
     private val aiService: AiStrategyService = AiStrategyService(),
@@ -117,6 +129,9 @@ class ApexMindViewModel(
 
     private val _aiTaskState = MutableStateFlow<AiTaskState>(AiTaskState.Idle)
     val aiTaskState: StateFlow<AiTaskState> = _aiTaskState.asStateFlow()
+
+    private val _researchModalState = MutableStateFlow<ResearchModalState>(ResearchModalState.Idle)
+    val researchModalState: StateFlow<ResearchModalState> = _researchModalState.asStateFlow()
 
     private val _statusBanner = MutableStateFlow<String?>(null)
     val statusBanner: StateFlow<String?> = _statusBanner.asStateFlow()
@@ -502,57 +517,14 @@ class ApexMindViewModel(
 
             result.fold(
                 onSuccess = { synthesis ->
-                    val doc = ResearchDoc(
-                        userId = currentUserId,
-                        gameId = game.id,
-                        sourceTitle = sourceTitle.ifBlank { "${game.title} Strategy Briefing" },
+                    persistResearchSynthesis(
+                        game = game,
+                        sourceTitle = sourceTitle.ifBlank { "${game.title} Strategy Briefing" }.take(150),
                         sourceType = sourceType,
-                        rawContent = rawContent,
-                        synthesizedSummary = synthesis.synthesizedSummary,
-                        keyObjectives = synthesis.keyObjectives,
-                        tacticalRules = synthesis.tacticalRules,
-                        aggressionBoost = synthesis.aggressionBoost.toLong(),
-                        defenseBoost = synthesis.defenseBoost.toLong(),
-                        lookaheadBoost = synthesis.lookaheadBoost.toLong(),
-                        trapAwarenessBoost = synthesis.trapAwarenessBoost.toLong()
+                        rawContent = rawContent.take(4900),
+                        synthesis = synthesis,
+                        profile = profile
                     )
-                    repository.addResearchDoc(doc)
-
-                    // Apply learned heuristic boosts to the AI's GameProfile
-                    val updatedProfile = profile.copy(
-                        aggressionWeight = (profile.aggressionWeight + synthesis.aggressionBoost).coerceIn(15L, 100L),
-                        defenseWeight = (profile.defenseWeight + synthesis.defenseBoost).coerceIn(15L, 100L),
-                        lookaheadWeight = (profile.lookaheadWeight + synthesis.lookaheadBoost).coerceIn(15L, 100L),
-                        trapAwarenessWeight = (profile.trapAwarenessWeight + synthesis.trapAwarenessBoost).coerceIn(15L, 100L),
-                        lastAdjustmentReason = "Pre-game research applied from '${doc.sourceTitle}': updated neural heuristic weights."
-                    )
-                    repository.saveOrUpdateGameProfile(updatedProfile)
-
-                    // Also seed a proactive StateMemory rule from the top tactical heuristic
-                    val topRule = synthesis.tacticalRules.firstOrNull()
-                    if (topRule != null) {
-                        val ruleSig = when (game) {
-                            GameType.TACTICAL_GRID -> "TG_RESEARCH_PROACTIVE_RULE"
-                            GameType.NEURAL_2048 -> "N2048_RESEARCH_PROACTIVE_RULE"
-                            GameType.CYBER_SNAKE -> "SNAKE_RESEARCH_PROACTIVE_RULE"
-                        }
-                        repository.upsertStateMemory(
-                            StateMemory(
-                                userId = currentUserId,
-                                gameId = game.id,
-                                stateSignature = ruleSig,
-                                stateDescription = "Pre-Game Research Rule (${doc.sourceTitle})",
-                                actionTaken = "APPLY_RESEARCH_HEURISTIC",
-                                scoreDelta = 30L,
-                                outcome = "optimal",
-                                qValueScore = 88L,
-                                lessonLearned = topRule,
-                                difficultyLevel = profile.difficultyLevel,
-                                timesRecalled = 1L
-                            )
-                        )
-                    }
-
                     _aiTaskState.value = AiTaskState.Success(
                         "Research complete! Extracted ${synthesis.tacticalRules.size} tactical rules and updated ${game.title} AI weights."
                     )
@@ -560,6 +532,125 @@ class ApexMindViewModel(
                 onFailure = { err ->
                     _aiTaskState.value = AiTaskState.Error(err.message ?: "Research synthesis failed.")
                 }
+            )
+        }
+    }
+
+    /**
+     * Triggered from the Research Lab modal inside GameStrategyDashboard:
+     * fetches strategy material from an external source for the user-entered game title,
+     * extracts strategic objectives via Gemini 3.8 Flash, and persists them to Firestore.
+     */
+    fun fetchExternalStrategyViaGemini(
+        game: GameType,
+        gameTitle: String,
+        externalSource: String,
+        sourceType: String
+    ) {
+        val trimmedTitle = gameTitle.trim()
+        if (trimmedTitle.isBlank()) {
+            _researchModalState.value = ResearchModalState.Error("Please enter a game title to research.")
+            return
+        }
+        viewModelScope.launch {
+            _researchModalState.value = ResearchModalState.Fetching(
+                "Fetching external strategy for $trimmedTitle via Gemini..."
+            )
+            val profile = getProfileForGame(game)
+            val result = aiService.fetchAndSynthesizeGameTitleStrategy(
+                targetGame = game,
+                gameTitleInput = trimmedTitle,
+                externalSourceInput = externalSource,
+                sourceType = sourceType,
+                currentProfile = profile
+            )
+
+            result.fold(
+                onSuccess = { fetched ->
+                    persistResearchSynthesis(
+                        game = game,
+                        sourceTitle = fetched.resolvedSourceTitle,
+                        sourceType = fetched.resolvedSourceType,
+                        rawContent = fetched.fetchedExcerpt,
+                        synthesis = fetched.synthesis,
+                        profile = profile
+                    )
+                    _researchModalState.value = ResearchModalState.Success(
+                        sourceTitle = fetched.resolvedSourceTitle,
+                        summary = fetched.synthesis.synthesizedSummary,
+                        extractedObjectives = fetched.synthesis.keyObjectives,
+                        fetchedFromWeb = fetched.fetchedFromWeb
+                    )
+                },
+                onFailure = { err ->
+                    _researchModalState.value = ResearchModalState.Error(
+                        err.message ?: "Failed to fetch strategy objectives via Gemini."
+                    )
+                }
+            )
+        }
+    }
+
+    fun resetResearchModalState() {
+        _researchModalState.value = ResearchModalState.Idle
+    }
+
+    private suspend fun persistResearchSynthesis(
+        game: GameType,
+        sourceTitle: String,
+        sourceType: String,
+        rawContent: String,
+        synthesis: com.example.ai.ResearchSynthesisResult,
+        profile: GameProfile
+    ) {
+        val doc = ResearchDoc(
+            userId = currentUserId,
+            gameId = game.id,
+            sourceTitle = sourceTitle,
+            sourceType = sourceType,
+            rawContent = rawContent,
+            synthesizedSummary = synthesis.synthesizedSummary,
+            keyObjectives = synthesis.keyObjectives,
+            tacticalRules = synthesis.tacticalRules,
+            aggressionBoost = synthesis.aggressionBoost.toLong(),
+            defenseBoost = synthesis.defenseBoost.toLong(),
+            lookaheadBoost = synthesis.lookaheadBoost.toLong(),
+            trapAwarenessBoost = synthesis.trapAwarenessBoost.toLong()
+        )
+        repository.addResearchDoc(doc)
+
+        // Apply learned heuristic boosts to the AI's GameProfile
+        val updatedProfile = profile.copy(
+            aggressionWeight = (profile.aggressionWeight + synthesis.aggressionBoost).coerceIn(15L, 100L),
+            defenseWeight = (profile.defenseWeight + synthesis.defenseBoost).coerceIn(15L, 100L),
+            lookaheadWeight = (profile.lookaheadWeight + synthesis.lookaheadBoost).coerceIn(15L, 100L),
+            trapAwarenessWeight = (profile.trapAwarenessWeight + synthesis.trapAwarenessBoost).coerceIn(15L, 100L),
+            lastAdjustmentReason = "Pre-game research applied from '${doc.sourceTitle}': updated neural heuristic weights."
+        )
+        repository.saveOrUpdateGameProfile(updatedProfile)
+
+        // Also seed a proactive StateMemory rule from the top tactical heuristic
+        val topRule = synthesis.tacticalRules.firstOrNull()
+        if (topRule != null) {
+            val ruleSig = when (game) {
+                GameType.TACTICAL_GRID -> "TG_RESEARCH_PROACTIVE_RULE"
+                GameType.NEURAL_2048 -> "N2048_RESEARCH_PROACTIVE_RULE"
+                GameType.CYBER_SNAKE -> "SNAKE_RESEARCH_PROACTIVE_RULE"
+            }
+            repository.upsertStateMemory(
+                StateMemory(
+                    userId = currentUserId,
+                    gameId = game.id,
+                    stateSignature = ruleSig,
+                    stateDescription = "Pre-Game Research Rule (${doc.sourceTitle})",
+                    actionTaken = "APPLY_RESEARCH_HEURISTIC",
+                    scoreDelta = 30L,
+                    outcome = "optimal",
+                    qValueScore = 88L,
+                    lessonLearned = topRule,
+                    difficultyLevel = profile.difficultyLevel,
+                    timesRecalled = 1L
+                )
             )
         }
     }
@@ -775,6 +866,20 @@ class ApexMindViewModel(
                 lastAdjustmentReason = "Updated optimal learning target win-rate band around $clamped%."
             )
             repository.saveOrUpdateGameProfile(updated)
+        }
+    }
+
+    fun toggleStrategicObjective(game: GameType, objective: String) {
+        viewModelScope.launch {
+            val profile = getProfileForGame(game)
+            val result = repository.toggleStrategicObjective(
+                gameId = game.id,
+                objectiveText = objective,
+                baseProfile = profile
+            )
+            result.onFailure { err ->
+                _statusBanner.value = "Could not sync objective state: ${err.localizedMessage ?: "Unknown error"}"
+            }
         }
     }
 }

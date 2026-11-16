@@ -62,6 +62,10 @@
           "type": "string",
           "description": "Explanation of the most recent adaptive difficulty calibration."
         },
+        "completedObjectives": {
+          "type": "array",
+          "description": "List of strategic objectives checked off by the operator for this game."
+        },
         "createdAt": {
           "type": "string",
           "format": "date-time",
