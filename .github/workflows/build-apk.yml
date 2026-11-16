@@ -56,15 +56,107 @@ jobs:
           DEBUG_KEYSTORE_BASE64: ${{ secrets.DEBUG_KEYSTORE_BASE64 }}
         run: |
           set -e
-          if [ ! -s debug.keystore ] && [ -n "$DEBUG_KEYSTORE_BASE64" ]; then
-            echo "Decoding debug.keystore from DEBUG_KEYSTORE_BASE64 secret..."
-            (printf '%s' "$DEBUG_KEYSTORE_BASE64" | tr -d '\r\n ' | base64 -d > debug.keystore) || rm -f debug.keystore
-          fi
+          python3 - <<'PY'
+          import base64
+          import json
+          import os
+          import re
+          import subprocess
 
-          if [ ! -s debug.keystore ] && [ -s debug.keystore.base64 ]; then
-            echo "Decoding debug.keystore from debug.keystore.base64..."
-            (tr -d '\r\n ' < debug.keystore.base64 | base64 -d > debug.keystore) || rm -f debug.keystore
-          fi
+          def clean_invisible(text: str) -> str:
+              return re.sub(r"[\ufeff\u200b\u200c\u200d\u2060]", "", text)
+
+          def decode_b64_flexible(raw: str):
+              s = clean_invisible(raw).strip()
+              if (s.startswith('"') and s.endswith('"')) or (s.startswith("'") and s.endswith("'")):
+                  s = s[1:-1].strip()
+              s = re.sub(r"\s+", "", s)
+              s = s.replace("-", "+").replace("_", "/")
+              if not s:
+                  return None, "empty after stripping whitespace"
+              if not re.fullmatch(r"[A-Za-z0-9+/=]+", s):
+                  bad = sorted(set(re.findall(r"[^A-Za-z0-9+/=]", s)))
+                  return None, f"contains non-base64 characters (count={len(bad)})"
+              s = s.rstrip("=")
+              s += "=" * ((4 - len(s) % 4) % 4)
+              try:
+                  return base64.b64decode(s, validate=True), None
+              except Exception as exc:
+                  return None, str(exc)
+
+          # 1. Decode debug.keystore from secret or fallback repo file
+          ks_secret = os.environ.get("DEBUG_KEYSTORE_BASE64", "")
+          if not os.path.exists("debug.keystore") and ks_secret.strip():
+              print(f"Decoding debug.keystore from DEBUG_KEYSTORE_BASE64 secret (chars={len(ks_secret)})...")
+              ks_bytes, err = decode_b64_flexible(ks_secret)
+              if ks_bytes:
+                  with open("debug.keystore", "wb") as f:
+                      f.write(ks_bytes)
+                  chk = subprocess.run(
+                      ["keytool", "-list", "-keystore", "debug.keystore", "-storepass", "android"],
+                      capture_output=True,
+                      text=True,
+                  )
+                  if chk.returncode != 0:
+                      print("WARNING: Decoded DEBUG_KEYSTORE_BASE64 is not a valid keystore; falling back.")
+                      os.remove("debug.keystore")
+              else:
+                  print(f"WARNING: DEBUG_KEYSTORE_BASE64 could not be base64-decoded ({err}); falling back.")
+
+          if not os.path.exists("debug.keystore") and os.path.exists("debug.keystore.base64"):
+              print("Decoding debug.keystore from debug.keystore.base64...")
+              with open("debug.keystore.base64", "r", encoding="utf-8", errors="replace") as f:
+                  ks_bytes, err = decode_b64_flexible(f.read())
+              if ks_bytes:
+                  with open("debug.keystore", "wb") as f:
+                      f.write(ks_bytes)
+              else:
+                  print(f"WARNING: debug.keystore.base64 decode failed ({err}).")
+
+          # 2. Decode app/google-services.json from raw JSON or Base64 JSON
+          gs_secret = os.environ.get("GOOGLE_SERVICES_JSON", "")
+          if not os.path.exists("app/google-services.json") and gs_secret.strip():
+              print(f"Processing GOOGLE_SERVICES_JSON secret (chars={len(gs_secret)})...")
+              cleaned = clean_invisible(gs_secret).strip()
+              if cleaned.startswith("```"):
+                  cleaned = re.sub(r"^```[a-zA-Z0-9_-]*\s*", "", cleaned)
+                  cleaned = re.sub(r"\s*```$", "", cleaned).strip()
+              if (cleaned.startswith('"') and cleaned.endswith('"')) or (cleaned.startswith("'") and cleaned.endswith("'")):
+                  cleaned = cleaned[1:-1].strip()
+
+              parsed_json = None
+              # Attempt A: raw JSON (or slice from first '{' to last '}')
+              candidates = [cleaned]
+              if "{" in cleaned and "}" in cleaned:
+                  candidates.append(cleaned[cleaned.find("{"):cleaned.rfind("}") + 1])
+              for cand in candidates:
+                  try:
+                      obj = json.loads(cand)
+                      if isinstance(obj, dict) and ("project_info" in obj or "client" in obj):
+                          parsed_json = json.dumps(obj, indent=2)
+                          break
+                  except Exception:
+                      pass
+
+              # Attempt B: base64-encoded JSON
+              if parsed_json is None:
+                  raw_bytes, err = decode_b64_flexible(cleaned)
+                  if raw_bytes:
+                      try:
+                          decoded_text = clean_invisible(raw_bytes.decode("utf-8", errors="strict")).strip()
+                          obj = json.loads(decoded_text)
+                          if isinstance(obj, dict):
+                              parsed_json = json.dumps(obj, indent=2)
+                      except Exception as json_err:
+                          print(f"WARNING: Base64-decoded GOOGLE_SERVICES_JSON is not valid JSON ({json_err}).")
+                  else:
+                      print(f"WARNING: GOOGLE_SERVICES_JSON is neither valid Firebase JSON nor valid Base64 ({err}).")
+
+              if parsed_json is not None:
+                  with open("app/google-services.json", "w", encoding="utf-8") as f:
+                      f.write(parsed_json + "\n")
+                  print("Successfully wrote app/google-services.json from GOOGLE_SERVICES_JSON secret.")
+          PY
 
           if [ ! -s debug.keystore ]; then
             echo "Generating CI debug.keystore via keytool..."
@@ -82,23 +174,15 @@ jobs:
           ls -lh debug.keystore
           keytool -list -v -keystore debug.keystore -storepass android -alias androiddebugkey | grep -E 'SHA1:|SHA256:' || true
 
-          if [ ! -f app/google-services.json ] && [ -n "$GOOGLE_SERVICES_JSON" ]; then
-            if printf '%s' "$GOOGLE_SERVICES_JSON" | grep -q '^\s*{'; then
-              printf '%s' "$GOOGLE_SERVICES_JSON" > app/google-services.json
-            else
-              printf '%s' "$GOOGLE_SERVICES_JSON" | tr -d '\r\n ' | base64 -d > app/google-services.json
-            fi
-          fi
-
           echo "Runner memory:"
           free -h || true
           if [ -f app/google-services.json ]; then
             echo "app/google-services.json: present"
           else
-            echo "NOTE: app/google-services.json is not present; APK will build, and Firebase features require app/google-services.json or the GOOGLE_SERVICES_JSON secret."
+            echo "NOTE: app/google-services.json is not present; APK will build, and Firebase features require valid app/google-services.json or GOOGLE_SERVICES_JSON secret."
             {
               echo "### Firebase Config Notice"
-              echo "The APK built without \`app/google-services.json\`. To enable Google Sign-In, Firestore, and Gemini AI Logic, add \`GOOGLE_SERVICES_JSON\` (and \`DEBUG_KEYSTORE_BASE64\`) in **Settings -> Secrets and variables -> Actions** and re-run."
+              echo "The APK built without a valid \`app/google-services.json\`. Ensure \`GOOGLE_SERVICES_JSON\` contains the complete raw JSON (or valid Base64) of \`app/google-services.json\` and \`DEBUG_KEYSTORE_BASE64\` contains the single-line Base64 string from \`debug.keystore.base64\`."
             } >> "$GITHUB_STEP_SUMMARY"
           fi
 
@@ -157,7 +241,7 @@ jobs:
         run: |
           set -e
           if [ -n "$RELEASE_KEYSTORE_BASE64" ] && [ -n "$STORE_PASSWORD" ] && [ -n "$KEY_PASSWORD" ]; then
-            printf '%s' "$RELEASE_KEYSTORE_BASE64" | tr -d '\r\n ' | base64 -d > "$KEYSTORE_PATH"
+            python3 -c 'import base64, os, re; s = re.sub(r"[\ufeff\u200b\u200c\u200d\u2060\s]+", "", os.environ["RELEASE_KEYSTORE_BASE64"]).replace("-", "+").replace("_", "/").rstrip("="); s += "=" * ((4 - len(s) % 4) % 4); open(os.environ["KEYSTORE_PATH"], "wb").write(base64.b64decode(s))'
             if [ -f ./gradlew ] && [ -f gradle/wrapper/gradle-wrapper.jar ]; then
               ./gradlew assembleRelease --max-workers=2 --no-configuration-cache --console=plain --stacktrace \
                 "-Dorg.gradle.jvmargs=-Xmx2560m -XX:MaxMetaspaceSize=768m -Dfile.encoding=UTF-8"
