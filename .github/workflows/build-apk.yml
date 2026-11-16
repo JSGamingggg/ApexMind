@@ -24,6 +24,7 @@ jobs:
 
       - name: Configure pre-installed Android SDK & install API 36.1
         run: |
+          set -e
           SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
           echo "ANDROID_HOME=$SDK_ROOT" >> "$GITHUB_ENV"
           echo "ANDROID_SDK_ROOT=$SDK_ROOT" >> "$GITHUB_ENV"
@@ -33,20 +34,49 @@ jobs:
             SDK_MANAGER="$(find "$SDK_ROOT/cmdline-tools" -name sdkmanager -type f 2>/dev/null | head -n 1 || true)"
           fi
 
-          if [ -n "$SDK_MANAGER" ]; then
-            echo "Using sdkmanager at: $SDK_MANAGER"
-            mkdir -p "$SDK_ROOT/licenses"
-            yes | "$SDK_MANAGER" --sdk_root="$SDK_ROOT" --licenses > /dev/null 2>&1 || true
-            yes | "$SDK_MANAGER" --sdk_root="$SDK_ROOT" "platform-tools" "platforms;android-36.1" "build-tools;36.0.0"
-          else
+          if [ -z "$SDK_MANAGER" ]; then
             echo "ERROR: sdkmanager not found under $SDK_ROOT"
             exit 1
           fi
 
-      - name: Decode debug keystore from base64
+          echo "Using sdkmanager at: $SDK_MANAGER"
+          mkdir -p "$SDK_ROOT/licenses"
+          (yes || true) | "$SDK_MANAGER" --sdk_root="$SDK_ROOT" --licenses > /dev/null 2>&1 || true
+          (yes || true) | "$SDK_MANAGER" --sdk_root="$SDK_ROOT" "platform-tools" "platforms;android-36.1" "build-tools;36.0.0"
+
+          if [ ! -d "$SDK_ROOT/platforms/android-36.1" ]; then
+            echo "ERROR: platforms;android-36.1 not installed under $SDK_ROOT/platforms"
+            ls -la "$SDK_ROOT/platforms" || true
+            exit 1
+          fi
+
+      - name: Prepare signing keystore and Firebase config
+        env:
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
         run: |
+          set -e
           if [ ! -f debug.keystore ] && [ -f debug.keystore.base64 ]; then
-            base64 -d debug.keystore.base64 > debug.keystore
+            tr -d '\r\n ' < debug.keystore.base64 | base64 -d > debug.keystore
+          fi
+          if [ ! -s debug.keystore ]; then
+            echo "ERROR: debug.keystore is missing or empty."
+            exit 1
+          fi
+
+          if [ ! -f app/google-services.json ] && [ -n "$GOOGLE_SERVICES_JSON" ]; then
+            if printf '%s' "$GOOGLE_SERVICES_JSON" | grep -q '^\s*{'; then
+              printf '%s' "$GOOGLE_SERVICES_JSON" > app/google-services.json
+            else
+              printf '%s' "$GOOGLE_SERVICES_JSON" | tr -d '\r\n ' | base64 -d > app/google-services.json
+            fi
+          fi
+
+          echo "Runner memory:"
+          free -h || true
+          if [ -f app/google-services.json ]; then
+            echo "app/google-services.json: present"
+          else
+            echo "::warning::app/google-services.json is not present in the repository; APK will build, but Firebase/Google Sign-In requires app/google-services.json or GOOGLE_SERVICES_JSON secret."
           fi
 
       - name: Set up Gradle
@@ -55,13 +85,32 @@ jobs:
           gradle-version: '9.3.1'
 
       - name: Build Debug APK
+        env:
+          GRADLE_OPTS: "-Xmx512m -XX:+HeapDumpOnOutOfMemoryError"
         run: |
+          set -o pipefail
           if [ -f ./gradlew ] && [ -f gradle/wrapper/gradle-wrapper.jar ]; then
             chmod +x ./gradlew
-            ./gradlew assembleDebug --no-daemon --stacktrace -Dorg.gradle.jvmargs=-Xmx3g
+            ./gradlew assembleDebug --max-workers=2 --no-configuration-cache --console=plain --stacktrace \
+              "-Dorg.gradle.jvmargs=-Xmx2560m -XX:MaxMetaspaceSize=768m -Dfile.encoding=UTF-8" 2>&1 | tee build-debug.log
           else
-            gradle assembleDebug --no-daemon --stacktrace -Dorg.gradle.jvmargs=-Xmx3g
+            gradle assembleDebug --max-workers=2 --no-configuration-cache --console=plain --stacktrace \
+              "-Dorg.gradle.jvmargs=-Xmx2560m -XX:MaxMetaspaceSize=768m -Dfile.encoding=UTF-8" 2>&1 | tee build-debug.log
           fi
+
+      - name: Publish failure diagnostics
+        if: failure()
+        run: |
+          {
+            echo "### Build Failure Diagnostics"
+            if [ -f build-debug.log ]; then
+              echo '```text'
+              tail -n 100 build-debug.log
+              echo '```'
+            else
+              echo "No build-debug.log generated."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Verify Debug APK output
         run: |
@@ -77,17 +126,21 @@ jobs:
       - name: Build Signed Release APK (optional, if secrets configured)
         id: release_build
         env:
+          GRADLE_OPTS: "-Xmx512m -XX:+HeapDumpOnOutOfMemoryError"
           RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
           STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
           KEYSTORE_PATH: ${{ github.workspace }}/my-upload-key.jks
         run: |
+          set -e
           if [ -n "$RELEASE_KEYSTORE_BASE64" ] && [ -n "$STORE_PASSWORD" ] && [ -n "$KEY_PASSWORD" ]; then
-            echo "$RELEASE_KEYSTORE_BASE64" | base64 -d > "$KEYSTORE_PATH"
+            printf '%s' "$RELEASE_KEYSTORE_BASE64" | tr -d '\r\n ' | base64 -d > "$KEYSTORE_PATH"
             if [ -f ./gradlew ] && [ -f gradle/wrapper/gradle-wrapper.jar ]; then
-              ./gradlew assembleRelease --no-daemon --stacktrace -Dorg.gradle.jvmargs=-Xmx3g
+              ./gradlew assembleRelease --max-workers=2 --no-configuration-cache --console=plain --stacktrace \
+                "-Dorg.gradle.jvmargs=-Xmx2560m -XX:MaxMetaspaceSize=768m -Dfile.encoding=UTF-8"
             else
-              gradle assembleRelease --no-daemon --stacktrace -Dorg.gradle.jvmargs=-Xmx3g
+              gradle assembleRelease --max-workers=2 --no-configuration-cache --console=plain --stacktrace \
+                "-Dorg.gradle.jvmargs=-Xmx2560m -XX:MaxMetaspaceSize=768m -Dfile.encoding=UTF-8"
             fi
             echo "built=true" >> "$GITHUB_OUTPUT"
           else
