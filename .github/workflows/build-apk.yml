@@ -55,13 +55,25 @@ jobs:
           GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
         run: |
           set -e
-          if [ ! -f debug.keystore ] && [ -f debug.keystore.base64 ]; then
-            tr -d '\r\n ' < debug.keystore.base64 | base64 -d > debug.keystore
+          if [ ! -s debug.keystore ] && [ -s debug.keystore.base64 ]; then
+            echo "Decoding debug.keystore from debug.keystore.base64..."
+            (tr -d '\r\n ' < debug.keystore.base64 | base64 -d > debug.keystore) || rm -f debug.keystore
           fi
+
           if [ ! -s debug.keystore ]; then
-            echo "ERROR: debug.keystore is missing or empty."
-            exit 1
+            echo "Generating CI debug.keystore via keytool..."
+            keytool -genkeypair \
+              -keystore debug.keystore \
+              -storepass android \
+              -alias androiddebugkey \
+              -keypass android \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 10000 \
+              -dname "CN=Android Debug,O=Android,C=US"
           fi
+
+          ls -lh debug.keystore
 
           if [ ! -f app/google-services.json ] && [ -n "$GOOGLE_SERVICES_JSON" ]; then
             if printf '%s' "$GOOGLE_SERVICES_JSON" | grep -q '^\s*{'; then
