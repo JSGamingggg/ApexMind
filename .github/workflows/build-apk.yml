@@ -22,21 +22,25 @@ jobs:
           distribution: temurin
           java-version: '21'
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Accept Android SDK licenses and install required SDK packages
+      - name: Configure pre-installed Android SDK & install API 36.1
         run: |
+          SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          echo "ANDROID_HOME=$SDK_ROOT" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$SDK_ROOT" >> "$GITHUB_ENV"
+
           SDK_MANAGER="$(command -v sdkmanager || true)"
-          if [ -z "$SDK_MANAGER" ] && [ -n "${ANDROID_HOME:-}" ]; then
-            SDK_MANAGER="$(find "${ANDROID_HOME}/cmdline-tools" -name sdkmanager -type f 2>/dev/null | head -n 1 || true)"
+          if [ -z "$SDK_MANAGER" ] && [ -d "$SDK_ROOT/cmdline-tools" ]; then
+            SDK_MANAGER="$(find "$SDK_ROOT/cmdline-tools" -name sdkmanager -type f 2>/dev/null | head -n 1 || true)"
           fi
-          if [ -z "$SDK_MANAGER" ] && [ -n "${ANDROID_SDK_ROOT:-}" ]; then
-            SDK_MANAGER="$(find "${ANDROID_SDK_ROOT}/cmdline-tools" -name sdkmanager -type f 2>/dev/null | head -n 1 || true)"
-          fi
+
           if [ -n "$SDK_MANAGER" ]; then
-            yes | "$SDK_MANAGER" --licenses > /dev/null 2>&1 || true
-            "$SDK_MANAGER" "platforms;android-36.1" "build-tools;36.0.0" || true
+            echo "Using sdkmanager at: $SDK_MANAGER"
+            mkdir -p "$SDK_ROOT/licenses"
+            yes | "$SDK_MANAGER" --sdk_root="$SDK_ROOT" --licenses > /dev/null 2>&1 || true
+            yes | "$SDK_MANAGER" --sdk_root="$SDK_ROOT" "platform-tools" "platforms;android-36.1" "build-tools;36.0.0"
+          else
+            echo "ERROR: sdkmanager not found under $SDK_ROOT"
+            exit 1
           fi
 
       - name: Decode debug keystore from base64
