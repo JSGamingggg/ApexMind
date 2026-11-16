@@ -1,0 +1,11 @@
+<resources>
+    <string name="app_name">ApexMind</string>
+    <string name="auth_subtitle">Autonomous Mobile Game-Playing AI Laboratory</string>
+    <string name="auth_description">Pre-game strategy research, real-time state-action memory recall, mistake reflection, and dynamic adaptive difficulty.</string>
+    <string name="sign_in_google">Sign in with Google</string>
+    <string name="nav_arena">AI Arena</string>
+    <string name="nav_research">Research Lab</string>
+    <string name="nav_memory">Memory Vault</string>
+    <string name="nav_adaptive">Adaptive Tier</string>
+    <string name="hero_banner_desc">ApexMind Neural Observatory Command Deck</string>
+</resources>

@@ -1,0 +1,6 @@
+{
+  "name": "ApexMind",
+  "description": "Autonomous mobile game-playing AI agent that conducts pre-game strategy research, plays interactive mobile games, analyzes mistakes, and permanently retains learned heuristics.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

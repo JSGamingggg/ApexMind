@@ -1,0 +1,260 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Pillar 1: Global Default-Deny Catch-All
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Global Hardened Primitives
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidGameId(gameId) {
+      return gameId is string && (gameId == 'tactical_grid' || gameId == 'neural_2048' || gameId == 'cyber_snake');
+    }
+
+    // 1. Validation Helper: GameProfile
+    function isValidGameProfile(data, userId, gameId) {
+      return data.userId is string && data.userId == request.auth.uid && data.userId == userId &&
+             data.gameId is string && data.gameId == gameId && isValidGameId(data.gameId) &&
+             data.difficultyLevel is int && data.difficultyLevel >= 1 && data.difficultyLevel <= 10 &&
+             data.autoAdjustDifficulty is bool &&
+             data.targetWinRate is int && data.targetWinRate >= 30 && data.targetWinRate <= 90 &&
+             data.totalWins is int && data.totalWins >= 0 && data.totalWins <= 1000000 &&
+             data.totalLosses is int && data.totalLosses >= 0 && data.totalLosses <= 1000000 &&
+             data.recentOutcomes is list && data.recentOutcomes.size() <= 10 &&
+             (data.recentOutcomes.size() == 0 || (data.recentOutcomes[0] is string && (data.recentOutcomes[0] == 'win' || data.recentOutcomes[0] == 'loss'))) &&
+             data.bestScore is int && data.bestScore >= 0 && data.bestScore <= 100000000 &&
+             data.aggressionWeight is int && data.aggressionWeight >= 0 && data.aggressionWeight <= 100 &&
+             data.defenseWeight is int && data.defenseWeight >= 0 && data.defenseWeight <= 100 &&
+             data.lookaheadWeight is int && data.lookaheadWeight >= 0 && data.lookaheadWeight <= 100 &&
+             data.trapAwarenessWeight is int && data.trapAwarenessWeight >= 0 && data.trapAwarenessWeight <= 100 &&
+             data.lastAdjustmentReason is string && data.lastAdjustmentReason.size() >= 1 && data.lastAdjustmentReason.size() <= 500 &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    // 2. Validation Helper: ResearchDoc
+    function isValidResearchDoc(data, userId) {
+      return data.userId is string && data.userId == request.auth.uid && data.userId == userId &&
+             isValidGameId(data.gameId) &&
+             data.sourceTitle is string && data.sourceTitle.size() >= 1 && data.sourceTitle.size() <= 150 &&
+             data.sourceType is string && (data.sourceType == 'wiki' || data.sourceType == 'strategy_guide' || data.sourceType == 'video_transcript' || data.sourceType == 'custom') &&
+             data.rawContent is string && data.rawContent.size() >= 1 && data.rawContent.size() <= 5000 &&
+             data.synthesizedSummary is string && data.synthesizedSummary.size() >= 1 && data.synthesizedSummary.size() <= 2000 &&
+             data.keyObjectives is list && data.keyObjectives.size() >= 1 && data.keyObjectives.size() <= 10 &&
+             (data.keyObjectives[0] is string && data.keyObjectives[0].size() <= 300) &&
+             data.tacticalRules is list && data.tacticalRules.size() >= 1 && data.tacticalRules.size() <= 10 &&
+             (data.tacticalRules[0] is string && data.tacticalRules[0].size() <= 300) &&
+             data.aggressionBoost is int && data.aggressionBoost >= -50 && data.aggressionBoost <= 50 &&
+             data.defenseBoost is int && data.defenseBoost >= -50 && data.defenseBoost <= 50 &&
+             data.lookaheadBoost is int && data.lookaheadBoost >= -50 && data.lookaheadBoost <= 50 &&
+             data.trapAwarenessBoost is int && data.trapAwarenessBoost >= -50 && data.trapAwarenessBoost <= 50 &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    // 3. Validation Helper: StateMemory
+    function isValidStateMemory(data, userId) {
+      return data.userId is string && data.userId == request.auth.uid && data.userId == userId &&
+             isValidGameId(data.gameId) &&
+             data.stateSignature is string && data.stateSignature.size() >= 1 && data.stateSignature.size() <= 200 &&
+             data.stateDescription is string && data.stateDescription.size() >= 1 && data.stateDescription.size() <= 500 &&
+             data.actionTaken is string && data.actionTaken.size() >= 1 && data.actionTaken.size() <= 100 &&
+             data.scoreDelta is int && data.scoreDelta >= -100000 && data.scoreDelta <= 100000 &&
+             data.outcome is string && (data.outcome == 'win' || data.outcome == 'loss' || data.outcome == 'mistake' || data.outcome == 'optimal') &&
+             data.qValueScore is int && data.qValueScore >= -100 && data.qValueScore <= 100 &&
+             data.lessonLearned is string && data.lessonLearned.size() >= 1 && data.lessonLearned.size() <= 1000 &&
+             data.difficultyLevel is int && data.difficultyLevel >= 1 && data.difficultyLevel <= 10 &&
+             data.timesRecalled is int && data.timesRecalled >= 0 && data.timesRecalled <= 1000000 &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    // 4. Validation Helper: MatchEpisode
+    function isValidMatchEpisode(data, userId) {
+      return data.userId is string && data.userId == request.auth.uid && data.userId == userId &&
+             isValidGameId(data.gameId) &&
+             data.difficultyLevel is int && data.difficultyLevel >= 1 && data.difficultyLevel <= 10 &&
+             data.outcome is string && (data.outcome == 'win' || data.outcome == 'loss') &&
+             data.finalScore is int && data.finalScore >= 0 && data.finalScore <= 100000000 &&
+             data.movesCount is int && data.movesCount >= 0 && data.movesCount <= 100000 &&
+             data.memoriesRecalled is int && data.memoriesRecalled >= 0 && data.memoriesRecalled <= 100000 &&
+             data.mistakesAvoided is int && data.mistakesAvoided >= 0 && data.mistakesAvoided <= 100000 &&
+             data.mistakesCommitted is int && data.mistakesCommitted >= 0 && data.mistakesCommitted <= 100000 &&
+             data.difficultyDelta is int && data.difficultyDelta >= -2 && data.difficultyDelta <= 2 &&
+             data.aiReflection is string && data.aiReflection.size() >= 1 && data.aiReflection.size() <= 1500 &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    // Collection 1: /users/{userId}/game_profiles/{gameId}
+    match /users/{userId}/game_profiles/{gameId} {
+      allow get: if isOwner(userId) && isValidId(userId) && isValidId(gameId);
+      allow list: if isOwner(userId);
+
+      allow create: if isOwner(userId) &&
+                       isValidId(userId) &&
+                       isValidId(gameId) &&
+                       incoming().keys().hasAll([
+                         'userId', 'gameId', 'difficultyLevel', 'autoAdjustDifficulty',
+                         'targetWinRate', 'totalWins', 'totalLosses', 'recentOutcomes',
+                         'bestScore', 'aggressionWeight', 'defenseWeight', 'lookaheadWeight',
+                         'trapAwarenessWeight', 'lastAdjustmentReason', 'createdAt', 'updatedAt'
+                       ]) &&
+                       incoming().keys().hasOnly([
+                         'userId', 'gameId', 'difficultyLevel', 'autoAdjustDifficulty',
+                         'targetWinRate', 'totalWins', 'totalLosses', 'recentOutcomes',
+                         'bestScore', 'aggressionWeight', 'defenseWeight', 'lookaheadWeight',
+                         'trapAwarenessWeight', 'lastAdjustmentReason', 'createdAt', 'updatedAt'
+                       ]) &&
+                       isValidGameProfile(incoming(), userId, gameId);
+
+      allow update: if isOwner(userId) &&
+                       isValidId(userId) &&
+                       isValidId(gameId) &&
+                       isValidGameProfile(incoming(), userId, gameId) &&
+                       incoming().userId == existing().userId &&
+                       incoming().gameId == existing().gameId &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().diff(existing()).affectedKeys().hasOnly([
+                         'difficultyLevel', 'autoAdjustDifficulty', 'targetWinRate',
+                         'totalWins', 'totalLosses', 'recentOutcomes', 'bestScore',
+                         'aggressionWeight', 'defenseWeight', 'lookaheadWeight',
+                         'trapAwarenessWeight', 'lastAdjustmentReason', 'updatedAt'
+                       ]);
+
+      allow delete: if isOwner(userId) && isValidId(userId) && isValidId(gameId);
+    }
+
+    // Collection 2: /users/{userId}/research_docs/{docId}
+    match /users/{userId}/research_docs/{docId} {
+      allow get: if isOwner(userId) && isValidId(userId) && isValidId(docId);
+      allow list: if isOwner(userId);
+
+      allow create: if isOwner(userId) &&
+                       isValidId(userId) &&
+                       isValidId(docId) &&
+                       incoming().keys().hasAll([
+                         'userId', 'gameId', 'sourceTitle', 'sourceType', 'rawContent',
+                         'synthesizedSummary', 'keyObjectives', 'tacticalRules',
+                         'aggressionBoost', 'defenseBoost', 'lookaheadBoost',
+                         'trapAwarenessBoost', 'createdAt', 'updatedAt'
+                       ]) &&
+                       incoming().keys().hasOnly([
+                         'userId', 'gameId', 'sourceTitle', 'sourceType', 'rawContent',
+                         'synthesizedSummary', 'keyObjectives', 'tacticalRules',
+                         'aggressionBoost', 'defenseBoost', 'lookaheadBoost',
+                         'trapAwarenessBoost', 'createdAt', 'updatedAt'
+                       ]) &&
+                       isValidResearchDoc(incoming(), userId);
+
+      allow update: if isOwner(userId) &&
+                       isValidId(userId) &&
+                       isValidId(docId) &&
+                       isValidResearchDoc(incoming(), userId) &&
+                       incoming().userId == existing().userId &&
+                       incoming().gameId == existing().gameId &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().diff(existing()).affectedKeys().hasOnly([
+                         'sourceTitle', 'synthesizedSummary', 'keyObjectives', 'tacticalRules',
+                         'aggressionBoost', 'defenseBoost', 'lookaheadBoost',
+                         'trapAwarenessBoost', 'updatedAt'
+                       ]);
+
+      allow delete: if isOwner(userId) && isValidId(userId) && isValidId(docId);
+    }
+
+    // Collection 3: /users/{userId}/state_memories/{memoryId}
+    match /users/{userId}/state_memories/{memoryId} {
+      allow get: if isOwner(userId) && isValidId(userId) && isValidId(memoryId);
+      allow list: if isOwner(userId);
+
+      allow create: if isOwner(userId) &&
+                       isValidId(userId) &&
+                       isValidId(memoryId) &&
+                       incoming().keys().hasAll([
+                         'userId', 'gameId', 'stateSignature', 'stateDescription',
+                         'actionTaken', 'scoreDelta', 'outcome', 'qValueScore',
+                         'lessonLearned', 'difficultyLevel', 'timesRecalled',
+                         'createdAt', 'updatedAt'
+                       ]) &&
+                       incoming().keys().hasOnly([
+                         'userId', 'gameId', 'stateSignature', 'stateDescription',
+                         'actionTaken', 'scoreDelta', 'outcome', 'qValueScore',
+                         'lessonLearned', 'difficultyLevel', 'timesRecalled',
+                         'createdAt', 'updatedAt'
+                       ]) &&
+                       isValidStateMemory(incoming(), userId);
+
+      allow update: if isOwner(userId) &&
+                       isValidId(userId) &&
+                       isValidId(memoryId) &&
+                       isValidStateMemory(incoming(), userId) &&
+                       incoming().userId == existing().userId &&
+                       incoming().gameId == existing().gameId &&
+                       incoming().stateSignature == existing().stateSignature &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().diff(existing()).affectedKeys().hasOnly([
+                         'scoreDelta', 'outcome', 'qValueScore', 'lessonLearned',
+                         'difficultyLevel', 'timesRecalled', 'updatedAt'
+                       ]);
+
+      allow delete: if isOwner(userId) && isValidId(userId) && isValidId(memoryId);
+    }
+
+    // Collection 4: /users/{userId}/match_episodes/{episodeId}
+    match /users/{userId}/match_episodes/{episodeId} {
+      allow get: if isOwner(userId) && isValidId(userId) && isValidId(episodeId);
+      allow list: if isOwner(userId);
+
+      allow create: if isOwner(userId) &&
+                       isValidId(userId) &&
+                       isValidId(episodeId) &&
+                       incoming().keys().hasAll([
+                         'userId', 'gameId', 'difficultyLevel', 'outcome', 'finalScore',
+                         'movesCount', 'memoriesRecalled', 'mistakesAvoided',
+                         'mistakesCommitted', 'difficultyDelta', 'aiReflection',
+                         'createdAt', 'updatedAt'
+                       ]) &&
+                       incoming().keys().hasOnly([
+                         'userId', 'gameId', 'difficultyLevel', 'outcome', 'finalScore',
+                         'movesCount', 'memoriesRecalled', 'mistakesAvoided',
+                         'mistakesCommitted', 'difficultyDelta', 'aiReflection',
+                         'createdAt', 'updatedAt'
+                       ]) &&
+                       isValidMatchEpisode(incoming(), userId);
+
+      allow update: if isOwner(userId) &&
+                       isValidId(userId) &&
+                       isValidId(episodeId) &&
+                       isValidMatchEpisode(incoming(), userId) &&
+                       incoming().userId == existing().userId &&
+                       incoming().gameId == existing().gameId &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().diff(existing()).affectedKeys().hasOnly([
+                         'aiReflection', 'updatedAt'
+                       ]);
+
+      allow delete: if isOwner(userId) && isValidId(userId) && isValidId(episodeId);
+    }
+  }
+}

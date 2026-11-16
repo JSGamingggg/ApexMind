@@ -1,0 +1,353 @@
+{
+  "entities": {
+    "GameProfile": {
+      "title": "GameProfile",
+      "description": "Tracks the AI agent's adaptive difficulty tier, win/loss metrics, and learned heuristic weights for a specific mobile game.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Owner Firebase Auth UID."
+        },
+        "gameId": {
+          "type": "string",
+          "enum": ["tactical_grid", "neural_2048", "cyber_snake"],
+          "description": "Identifier of the mobile game."
+        },
+        "difficultyLevel": {
+          "type": "integer",
+          "description": "Current adaptive difficulty level from 1 to 10."
+        },
+        "autoAdjustDifficulty": {
+          "type": "boolean",
+          "description": "Whether the AI automatically adjusts difficulty based on win/loss ratio."
+        },
+        "targetWinRate": {
+          "type": "integer",
+          "description": "Target optimal learning win rate percentage (30 to 90)."
+        },
+        "totalWins": {
+          "type": "integer",
+          "description": "Total matches won by the AI agent."
+        },
+        "totalLosses": {
+          "type": "integer",
+          "description": "Total matches lost by the AI agent."
+        },
+        "recentOutcomes": {
+          "type": "array",
+          "description": "Bounded sliding window of up to 10 recent match outcomes ('win' or 'loss')."
+        },
+        "bestScore": {
+          "type": "integer",
+          "description": "Highest score achieved by the AI in this game."
+        },
+        "aggressionWeight": {
+          "type": "integer",
+          "description": "Learned heuristic weight for aggressive scoring moves (0 to 100)."
+        },
+        "defenseWeight": {
+          "type": "integer",
+          "description": "Learned heuristic weight for defensive survival and space preservation (0 to 100)."
+        },
+        "lookaheadWeight": {
+          "type": "integer",
+          "description": "Learned heuristic weight for multi-step board planning (0 to 100)."
+        },
+        "trapAwarenessWeight": {
+          "type": "integer",
+          "description": "Learned heuristic weight for hazard and mistake avoidance (0 to 100)."
+        },
+        "lastAdjustmentReason": {
+          "type": "string",
+          "description": "Explanation of the most recent adaptive difficulty calibration."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of creation (FieldValue.serverTimestamp())."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of last update (FieldValue.serverTimestamp())."
+        }
+      },
+      "required": [
+        "userId",
+        "gameId",
+        "difficultyLevel",
+        "autoAdjustDifficulty",
+        "targetWinRate",
+        "totalWins",
+        "totalLosses",
+        "recentOutcomes",
+        "bestScore",
+        "aggressionWeight",
+        "defenseWeight",
+        "lookaheadWeight",
+        "trapAwarenessWeight",
+        "lastAdjustmentReason",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "ResearchDoc": {
+      "title": "ResearchDoc",
+      "description": "Pre-game research briefing synthesized from game wikis, strategy guides, or video transcripts.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Owner Firebase Auth UID."
+        },
+        "gameId": {
+          "type": "string",
+          "enum": ["tactical_grid", "neural_2048", "cyber_snake"],
+          "description": "Target game identifier."
+        },
+        "sourceTitle": {
+          "type": "string",
+          "description": "Title of the wiki, strategy guide, or transcript source."
+        },
+        "sourceType": {
+          "type": "string",
+          "enum": ["wiki", "strategy_guide", "video_transcript", "custom"],
+          "description": "Category of the external research material."
+        },
+        "rawContent": {
+          "type": "string",
+          "description": "Raw excerpt from the wiki, guide, or video transcript."
+        },
+        "synthesizedSummary": {
+          "type": "string",
+          "description": "AI-distilled executive strategy summary."
+        },
+        "keyObjectives": {
+          "type": "array",
+          "description": "Bounded list of core game objectives learned during research."
+        },
+        "tacticalRules": {
+          "type": "array",
+          "description": "Bounded list of actionable decision rules extracted from the research."
+        },
+        "aggressionBoost": {
+          "type": "integer",
+          "description": "Recommended adjustment to aggression weight (-50 to 50)."
+        },
+        "defenseBoost": {
+          "type": "integer",
+          "description": "Recommended adjustment to defense weight (-50 to 50)."
+        },
+        "lookaheadBoost": {
+          "type": "integer",
+          "description": "Recommended adjustment to lookahead weight (-50 to 50)."
+        },
+        "trapAwarenessBoost": {
+          "type": "integer",
+          "description": "Recommended adjustment to trap awareness weight (-50 to 50)."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of creation (FieldValue.serverTimestamp())."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of last update (FieldValue.serverTimestamp())."
+        }
+      },
+      "required": [
+        "userId",
+        "gameId",
+        "sourceTitle",
+        "sourceType",
+        "rawContent",
+        "synthesizedSummary",
+        "keyObjectives",
+        "tacticalRules",
+        "aggressionBoost",
+        "defenseBoost",
+        "lookaheadBoost",
+        "trapAwarenessBoost",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "StateMemory": {
+      "title": "StateMemory",
+      "description": "Episodic state-action-outcome memory entry queried by the AI during gameplay to repeat winning patterns and avoid past mistakes.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Owner Firebase Auth UID."
+        },
+        "gameId": {
+          "type": "string",
+          "enum": ["tactical_grid", "neural_2048", "cyber_snake"],
+          "description": "Game identifier."
+        },
+        "stateSignature": {
+          "type": "string",
+          "description": "Canonical encoded board/grid state key for fast similarity lookup."
+        },
+        "stateDescription": {
+          "type": "string",
+          "description": "Human-readable description of the board state."
+        },
+        "actionTaken": {
+          "type": "string",
+          "description": "Action or move executed in this state."
+        },
+        "scoreDelta": {
+          "type": "integer",
+          "description": "Immediate score change resulting from the action."
+        },
+        "outcome": {
+          "type": "string",
+          "enum": ["win", "loss", "mistake", "optimal"],
+          "description": "Resulting classification of the state-action transition."
+        },
+        "qValueScore": {
+          "type": "integer",
+          "description": "Learned utility value (-100 to 100) guiding future decisions in this state."
+        },
+        "lessonLearned": {
+          "type": "string",
+          "description": "Corrective rule or strategic insight retained from this state-action outcome."
+        },
+        "difficultyLevel": {
+          "type": "integer",
+          "description": "Difficulty level (1 to 10) at which this memory was recorded."
+        },
+        "timesRecalled": {
+          "type": "integer",
+          "description": "Number of times the AI has queried and applied this memory in subsequent matches."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of creation (FieldValue.serverTimestamp())."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of last update (FieldValue.serverTimestamp())."
+        }
+      },
+      "required": [
+        "userId",
+        "gameId",
+        "stateSignature",
+        "stateDescription",
+        "actionTaken",
+        "scoreDelta",
+        "outcome",
+        "qValueScore",
+        "lessonLearned",
+        "difficultyLevel",
+        "timesRecalled",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "MatchEpisode": {
+      "title": "MatchEpisode",
+      "description": "Completed match telemetry log recording performance metrics, memory hits, mistakes avoided, and adaptive difficulty calibration.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Owner Firebase Auth UID."
+        },
+        "gameId": {
+          "type": "string",
+          "enum": ["tactical_grid", "neural_2048", "cyber_snake"],
+          "description": "Game identifier."
+        },
+        "difficultyLevel": {
+          "type": "integer",
+          "description": "Difficulty tier played during the match (1 to 10)."
+        },
+        "outcome": {
+          "type": "string",
+          "enum": ["win", "loss"],
+          "description": "Match result."
+        },
+        "finalScore": {
+          "type": "integer",
+          "description": "Final score achieved in the match."
+        },
+        "movesCount": {
+          "type": "integer",
+          "description": "Total turns/moves survived or played."
+        },
+        "memoriesRecalled": {
+          "type": "integer",
+          "description": "Number of times stored state-action memories informed decisions."
+        },
+        "mistakesAvoided": {
+          "type": "integer",
+          "description": "Number of times negative state memories prevented repeating a past mistake."
+        },
+        "mistakesCommitted": {
+          "type": "integer",
+          "description": "Number of suboptimal or penalized actions committed."
+        },
+        "difficultyDelta": {
+          "type": "integer",
+          "description": "Adaptive difficulty adjustment triggered after this match (-2 to 2)."
+        },
+        "aiReflection": {
+          "type": "string",
+          "description": "Post-match AI autopsy and learning synthesis."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of creation (FieldValue.serverTimestamp())."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of last update (FieldValue.serverTimestamp())."
+        }
+      },
+      "required": [
+        "userId",
+        "gameId",
+        "difficultyLevel",
+        "outcome",
+        "finalScore",
+        "movesCount",
+        "memoriesRecalled",
+        "mistakesAvoided",
+        "mistakesCommitted",
+        "difficultyDelta",
+        "aiReflection",
+        "createdAt",
+        "updatedAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/users/{userId}/game_profiles/{gameId}": {
+      "schema": { "$ref": "#/entities/GameProfile" },
+      "description": "Per-user AI agent profile, heuristic weights, and adaptive difficulty state for each game."
+    },
+    "/users/{userId}/research_docs/{docId}": {
+      "schema": { "$ref": "#/entities/ResearchDoc" },
+      "description": "Per-user pre-game research briefings synthesized from wikis, guides, and transcripts."
+    },
+    "/users/{userId}/state_memories/{memoryId}": {
+      "schema": { "$ref": "#/entities/StateMemory" },
+      "description": "Per-user episodic state-action-outcome memory bank."
+    },
+    "/users/{userId}/match_episodes/{episodeId}": {
+      "schema": { "$ref": "#/entities/MatchEpisode" },
+      "description": "Per-user match history and adaptive difficulty progression log."
+    }
+  }
+}
