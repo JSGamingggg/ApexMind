@@ -1,5 +1,14 @@
 package com.example.ui.screens
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -12,6 +21,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -21,12 +31,11 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.filled.Speed
-import androidx.compose.material.icons.filled.TrendingUp
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -49,6 +58,7 @@ import com.example.data.GameType
 import com.example.data.MatchEpisode
 import com.example.engine.AdaptiveDifficultyEngine
 import com.example.ui.ApexMindViewModel
+import com.example.ui.components.GameSelectorBar
 import com.example.ui.theme.AmberWarning
 import com.example.ui.theme.BorderSubtle
 import com.example.ui.theme.CoralMistake
@@ -96,34 +106,22 @@ fun AdaptiveAnalyticsScreen(
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // Game Selector
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                GameType.entries.forEach { game ->
-                    FilterChip(
-                        selected = game == selectedGame,
-                        onClick = { viewModel.selectGame(game) },
-                        label = { Text(game.title, style = MaterialTheme.typography.labelMedium) },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = ElectricCyan.copy(alpha = 0.22f),
-                            selectedLabelColor = ElectricCyan
-                        ),
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-            }
+            // Accessible Game Selector
+            GameSelectorBar(
+                selectedGame = selectedGame,
+                onSelectGame = { viewModel.selectGame(it) }
+            )
 
             Spacer(modifier = Modifier.height(12.dp))
 
             // Adaptive Difficulty Calibration Card
             Card(
                 colors = CardDefaults.cardColors(containerColor = SlateSurface),
+                border = BorderStroke(1.dp, ElectricCyan.copy(alpha = 0.4f)),
                 shape = RoundedCornerShape(18.dp),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .border(1.dp, ElectricCyan.copy(alpha = 0.4f), RoundedCornerShape(18.dp))
+                    .animateContentSize(tween(240, easing = FastOutSlowInEasing))
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Row(
@@ -230,7 +228,9 @@ fun AdaptiveAnalyticsScreen(
                                 selected = profile.difficultyLevel.toInt() == lvl,
                                 onClick = { viewModel.setManualDifficultyLevel(selectedGame, lvl) },
                                 label = { Text("T$lvl", style = MaterialTheme.typography.labelSmall) },
-                                modifier = Modifier.testTag("difficulty_tier_$lvl")
+                                modifier = Modifier
+                                    .heightIn(min = 48.dp)
+                                    .testTag("difficulty_tier_$lvl")
                             )
                         }
                     }
@@ -270,27 +270,33 @@ fun AdaptiveAnalyticsScreen(
                     Spacer(modifier = Modifier.height(8.dp))
 
                     // Active Engine Parameters at Current Tier
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(ObsidianBackground)
-                            .padding(12.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        when (selectedGame) {
-                            GameType.TACTICAL_GRID -> {
-                                Text("EMP Traps: ${diffParams.tacticalTrapCount}", style = MaterialTheme.typography.labelMedium, color = CoralMistake)
-                                Text("Bot Depth: ${diffParams.tacticalBotLookahead} ply", style = MaterialTheme.typography.labelMedium, color = PurpleNeural)
-                                Text("Target Lead: +${diffParams.tacticalTargetLead}", style = MaterialTheme.typography.labelMedium, color = ElectricCyan)
-                            }
-                            GameType.NEURAL_2048 -> {
-                                Text("Target Tile: ${diffParams.targetTile2048}", style = MaterialTheme.typography.labelMedium, color = EmeraldTelemetry)
-                                Text("4-Tile Spawn: ${diffParams.fourTileSpawnProbPercent}%", style = MaterialTheme.typography.labelMedium, color = AmberWarning)
-                            }
-                            GameType.CYBER_SNAKE -> {
-                                Text("Firewalls: ${diffParams.snakeFirewallCount}", style = MaterialTheme.typography.labelMedium, color = CoralMistake)
-                                Text("Target Cores: ${diffParams.snakeTargetCores}", style = MaterialTheme.typography.labelMedium, color = EmeraldTelemetry)
+                    AnimatedContent(
+                        targetState = selectedGame,
+                        transitionSpec = { fadeIn(tween(200)) togetherWith fadeOut(tween(140)) },
+                        label = "adaptive_params_strip"
+                    ) { game ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(ObsidianBackground)
+                                .padding(12.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            when (game) {
+                                GameType.TACTICAL_GRID -> {
+                                    Text("EMP Traps: ${diffParams.tacticalTrapCount}", style = MaterialTheme.typography.labelMedium, color = CoralMistake)
+                                    Text("Bot Depth: ${diffParams.tacticalBotLookahead} ply", style = MaterialTheme.typography.labelMedium, color = PurpleNeural)
+                                    Text("Target Lead: +${diffParams.tacticalTargetLead}", style = MaterialTheme.typography.labelMedium, color = ElectricCyan)
+                                }
+                                GameType.NEURAL_2048 -> {
+                                    Text("Target Tile: ${diffParams.targetTile2048}", style = MaterialTheme.typography.labelMedium, color = EmeraldTelemetry)
+                                    Text("4-Tile Spawn: ${diffParams.fourTileSpawnProbPercent}%", style = MaterialTheme.typography.labelMedium, color = AmberWarning)
+                                }
+                                GameType.CYBER_SNAKE -> {
+                                    Text("Firewalls: ${diffParams.snakeFirewallCount}", style = MaterialTheme.typography.labelMedium, color = CoralMistake)
+                                    Text("Target Cores: ${diffParams.snakeTargetCores}", style = MaterialTheme.typography.labelMedium, color = EmeraldTelemetry)
+                                }
                             }
                         }
                     }
@@ -309,13 +315,14 @@ fun AdaptiveAnalyticsScreen(
             // Learned Neural Heuristic Weights Card
             Card(
                 colors = CardDefaults.cardColors(containerColor = SlateSurface),
+                border = BorderStroke(1.dp, BorderSubtle),
                 shape = RoundedCornerShape(18.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(
-                            imageVector = Icons.Default.TrendingUp,
+                            imageVector = Icons.AutoMirrored.Filled.TrendingUp,
                             contentDescription = "Heuristic Weights",
                             tint = ElectricCyan,
                             modifier = Modifier.size(20.dp)
@@ -348,35 +355,43 @@ fun AdaptiveAnalyticsScreen(
             )
             Spacer(modifier = Modifier.height(8.dp))
 
-            if (gameEpisodes.isEmpty()) {
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = SlateSurface),
-                    shape = RoundedCornerShape(16.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(
-                        modifier = Modifier.padding(20.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
+            AnimatedContent(
+                targetState = gameEpisodes.isEmpty(),
+                transitionSpec = { fadeIn(tween(220)) togetherWith fadeOut(tween(150)) },
+                label = "adaptive_episodes_list_transition"
+            ) { isEmpty ->
+                if (isEmpty) {
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = SlateSurface),
+                        border = BorderStroke(1.dp, BorderSubtle),
+                        shape = RoundedCornerShape(16.dp),
+                        modifier = Modifier.fillMaxWidth()
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Speed,
-                            contentDescription = "No Episodes Yet",
-                            tint = PurpleNeural,
-                            modifier = Modifier.size(32.dp)
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text("No Match Episodes Logged Yet", style = MaterialTheme.typography.titleMedium)
-                        Text(
-                            text = "Complete a match in the AI Arena to see post-match reflections, memory recall counts, and difficulty tier adjustments.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                        Column(
+                            modifier = Modifier.padding(20.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Speed,
+                                contentDescription = "No Episodes Yet",
+                                tint = PurpleNeural,
+                                modifier = Modifier.size(32.dp)
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text("No Match Episodes Logged Yet", style = MaterialTheme.typography.titleMedium)
+                            Text(
+                                text = "Complete a match in the AI Arena to see post-match reflections, memory recall counts, and difficulty tier adjustments.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     }
-                }
-            } else {
-                gameEpisodes.forEach { ep ->
-                    MatchEpisodeCard(episode = ep)
-                    Spacer(modifier = Modifier.height(10.dp))
+                } else {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        gameEpisodes.forEach { ep ->
+                            MatchEpisodeCard(episode = ep)
+                        }
+                    }
                 }
             }
 
@@ -391,6 +406,11 @@ private fun HeuristicBar(
     weight: Int,
     color: Color
 ) {
+    val animatedProgress by animateFloatAsState(
+        targetValue = (weight.coerceIn(0, 100)) / 100f,
+        animationSpec = tween(durationMillis = 420, easing = FastOutSlowInEasing),
+        label = "heuristic_bar_$label"
+    )
     Column(modifier = Modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -401,7 +421,7 @@ private fun HeuristicBar(
         }
         Spacer(modifier = Modifier.height(4.dp))
         LinearProgressIndicator(
-            progress = { (weight.coerceIn(0, 100)) / 100f },
+            progress = { animatedProgress },
             color = color,
             trackColor = ObsidianBackground,
             modifier = Modifier

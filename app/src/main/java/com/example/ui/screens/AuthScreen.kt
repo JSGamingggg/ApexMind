@@ -1,5 +1,15 @@
 package com.example.ui.screens
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.MutableTransitionState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.slideInVertically
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -23,9 +33,9 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Memory
-import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -61,6 +71,7 @@ import androidx.credentials.CredentialManager
 import com.example.R
 import com.example.auth.attemptAutoSignIn
 import com.example.auth.onGoogleSignInClicked
+import com.example.ui.theme.BorderSubtle
 import com.example.ui.theme.ElectricCyan
 import com.example.ui.theme.EmeraldTelemetry
 import com.example.ui.theme.ObsidianBackground
@@ -87,6 +98,10 @@ fun AuthScreen(
         )
     }
 
+    val visibleState = remember {
+        MutableTransitionState(false).apply { targetState = true }
+    }
+
     Surface(
         modifier = Modifier.fillMaxSize(),
         color = ObsidianBackground
@@ -94,17 +109,31 @@ fun AuthScreen(
         Box(
             modifier = Modifier
                 .fillMaxSize()
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(
+                            ElectricCyan.copy(alpha = 0.08f),
+                            ObsidianBackground,
+                            PurpleNeural.copy(alpha = 0.05f)
+                        )
+                    )
+                )
                 .windowInsetsPadding(WindowInsets.safeDrawing),
             contentAlignment = Alignment.Center
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .widthIn(max = 520.dp)
-                    .verticalScroll(rememberScrollState())
-                    .padding(24.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
+            AnimatedVisibility(
+                visibleState = visibleState,
+                enter = fadeIn(tween(320, easing = FastOutSlowInEasing)) +
+                    slideInVertically(tween(320, easing = FastOutSlowInEasing)) { it / 16 }
             ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .widthIn(max = 520.dp)
+                        .verticalScroll(rememberScrollState())
+                        .padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
                 // Hero Image Banner
                 Card(
                     modifier = Modifier
@@ -180,7 +209,7 @@ fun AuthScreen(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     CapabilityRow(
-                        icon = Icons.Default.MenuBook,
+                        icon = Icons.AutoMirrored.Filled.MenuBook,
                         accent = ElectricCyan,
                         title = "Pre-Game Strategy Research",
                         subtitle = "Ingests game wikis, strategy guides & video transcripts before playing."
@@ -201,11 +230,16 @@ fun AuthScreen(
 
                 Spacer(modifier = Modifier.height(28.dp))
 
-                if (errorMessage != null) {
+                AnimatedVisibility(
+                    visible = errorMessage != null,
+                    enter = fadeIn(tween(200)) + expandVertically(tween(220)),
+                    exit = fadeOut(tween(150)) + shrinkVertically(tween(160))
+                ) {
                     Card(
                         colors = CardDefaults.cardColors(
                             containerColor = MaterialTheme.colorScheme.error.copy(alpha = 0.16f)
                         ),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.45f)),
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(bottom = 16.dp)
@@ -271,6 +305,7 @@ fun AuthScreen(
                         )
                     }
                 }
+                }
             }
         }
     }
@@ -288,6 +323,7 @@ private fun CapabilityRow(
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
             .background(SlateSurface)
+            .border(1.dp, BorderSubtle, RoundedCornerShape(16.dp))
             .padding(14.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {

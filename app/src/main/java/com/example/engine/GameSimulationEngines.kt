@@ -509,7 +509,15 @@ object Neural2048Engine {
 
         val naiveTop = evaluations.maxByOrNull { it.baseHeuristicScore }
         val chosenEval = if (forcedAction != null) {
-            evaluations.firstOrNull { it.action == forcedAction } ?: evaluations.first()
+            evaluations.firstOrNull { it.action == forcedAction } ?: return state to AiDecisionTelemetry(
+                turnNumber = state.turn,
+                stateSignature = sig,
+                stateDescription = desc,
+                chosenAction = "NONE",
+                immediateScoreDelta = 0,
+                candidates = evaluations,
+                reasoningHeadline = "Slide $forcedAction blocked — no tiles shift in that direction."
+            )
         } else {
             evaluations.first()
         }

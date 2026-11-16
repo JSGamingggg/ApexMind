@@ -1,6 +1,16 @@
 package com.example.ui.screens
 
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -46,6 +56,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.data.GameType
@@ -151,25 +162,25 @@ fun MemoryVaultScreen(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 VaultStatCard(
-                    label = "TOTAL MEMORIES",
+                    label = "TOTAL",
                     value = "${stateMemories.size}",
                     accent = ElectricCyan,
                     modifier = Modifier.weight(1f)
                 )
                 VaultStatCard(
-                    label = "OPTIMAL / WINS",
+                    label = "OPTIMAL",
                     value = "$optimalStored",
                     accent = EmeraldTelemetry,
                     modifier = Modifier.weight(1f)
                 )
                 VaultStatCard(
-                    label = "MISTAKE GUARDS",
+                    label = "VETOES",
                     value = "$mistakesStored",
                     accent = CoralMistake,
                     modifier = Modifier.weight(1f)
                 )
                 VaultStatCard(
-                    label = "LIVE RECALLS",
+                    label = "RECALLS",
                     value = "$totalRecalls",
                     accent = PurpleNeural,
                     modifier = Modifier.weight(1f)
@@ -177,14 +188,18 @@ fun MemoryVaultScreen(
             }
 
             // Optional Manual Memory Rule Injection Form
-            AnimatedVisibility(visible = showAddForm) {
+            AnimatedVisibility(
+                visible = showAddForm,
+                enter = fadeIn(tween(220)) + expandVertically(tween(240, easing = FastOutSlowInEasing)),
+                exit = fadeOut(tween(160)) + shrinkVertically(tween(180, easing = FastOutSlowInEasing))
+            ) {
                 Card(
                     colors = CardDefaults.cardColors(containerColor = SlateSurface),
+                    border = BorderStroke(1.dp, ElectricCyan.copy(alpha = 0.5f)),
                     shape = RoundedCornerShape(18.dp),
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(top = 12.dp)
-                        .border(1.dp, ElectricCyan.copy(alpha = 0.5f), RoundedCornerShape(18.dp))
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         Text(
@@ -355,41 +370,49 @@ fun MemoryVaultScreen(
 
             Spacer(modifier = Modifier.height(10.dp))
 
-            if (filteredMemories.isEmpty()) {
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = SlateSurface),
-                    shape = RoundedCornerShape(16.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(
-                        modifier = Modifier.padding(20.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
+            AnimatedContent(
+                targetState = filteredMemories.isEmpty(),
+                transitionSpec = { fadeIn(tween(220)) togetherWith fadeOut(tween(150)) },
+                label = "memory_vault_list_transition"
+            ) { isEmpty ->
+                if (isEmpty) {
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = SlateSurface),
+                        border = BorderStroke(1.dp, BorderSubtle),
+                        shape = RoundedCornerShape(16.dp),
+                        modifier = Modifier.fillMaxWidth()
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Memory,
-                            contentDescription = "Empty Memory Filter",
-                            tint = ElectricCyan,
-                            modifier = Modifier.size(32.dp)
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = "No State-Action Memories Match Filter",
-                            style = MaterialTheme.typography.titleMedium
-                        )
-                        Text(
-                            text = "Run matches in the AI Arena or synthesize Pre-Game Research to populate the episodic memory bank.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                        Column(
+                            modifier = Modifier.padding(20.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Memory,
+                                contentDescription = "Empty Memory Filter",
+                                tint = ElectricCyan,
+                                modifier = Modifier.size(32.dp)
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = "No State-Action Memories Match Filter",
+                                style = MaterialTheme.typography.titleMedium
+                            )
+                            Text(
+                                text = "Run matches in the AI Arena or synthesize Pre-Game Research to populate the episodic memory bank.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     }
-                }
-            } else {
-                filteredMemories.forEach { memory ->
-                    StateMemoryCard(
-                        memory = memory,
-                        onDelete = { viewModel.deleteMemory(memory.id) }
-                    )
-                    Spacer(modifier = Modifier.height(10.dp))
+                } else {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        filteredMemories.forEach { memory ->
+                            StateMemoryCard(
+                                memory = memory,
+                                onDelete = { viewModel.deleteMemory(memory.id) }
+                            )
+                        }
+                    }
                 }
             }
 
@@ -410,19 +433,22 @@ private fun VaultStatCard(
             .clip(RoundedCornerShape(14.dp))
             .background(SlateSurface)
             .border(1.dp, accent.copy(alpha = 0.35f), RoundedCornerShape(14.dp))
-            .padding(10.dp),
+            .padding(horizontal = 8.dp, vertical = 10.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text(
             text = label,
             style = MaterialTheme.typography.labelSmall,
-            color = accent
+            color = accent,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
         )
         Spacer(modifier = Modifier.height(2.dp))
         Text(
             text = value,
             style = MaterialTheme.typography.headlineSmall,
-            color = Color.White
+            color = Color.White,
+            maxLines = 1
         )
     }
 }
@@ -438,10 +464,11 @@ private fun StateMemoryCard(
 
     Card(
         colors = CardDefaults.cardColors(containerColor = ElevatedCardSurface),
+        border = BorderStroke(1.dp, accent.copy(alpha = 0.45f)),
         shape = RoundedCornerShape(16.dp),
         modifier = Modifier
             .fillMaxWidth()
-            .border(1.dp, accent.copy(alpha = 0.45f), RoundedCornerShape(16.dp))
+            .animateContentSize(tween(220, easing = FastOutSlowInEasing))
     ) {
         Column(modifier = Modifier.padding(14.dp)) {
             Row(
@@ -451,7 +478,8 @@ private fun StateMemoryCard(
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.weight(1f)
                 ) {
                     Text(
                         text = if (isNegative) "MISTAKE VETO" else "OPTIMAL PATTERN",
@@ -463,21 +491,23 @@ private fun StateMemoryCard(
                             .padding(horizontal = 8.dp, vertical = 3.dp)
                     )
                     Text(
-                        text = "$gameTitle • Tier ${memory.difficultyLevel}",
+                        text = "$gameTitle • T${memory.difficultyLevel}",
                         style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
 
                 IconButton(
                     onClick = onDelete,
-                    modifier = Modifier.size(36.dp)
+                    modifier = Modifier.size(48.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Default.Delete,
                         contentDescription = "Delete Memory",
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(18.dp)
+                        modifier = Modifier.size(20.dp)
                     )
                 }
             }

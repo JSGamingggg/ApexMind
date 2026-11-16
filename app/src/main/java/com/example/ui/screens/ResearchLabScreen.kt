@@ -1,5 +1,16 @@
 package com.example.ui.screens
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -7,11 +18,13 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -20,9 +33,9 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -51,10 +64,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.ai.CuratedResearchLibrary
-import com.example.data.GameType
 import com.example.data.ResearchDoc
 import com.example.ui.AiTaskState
 import com.example.ui.ApexMindViewModel
+import com.example.ui.components.GameSelectorBar
 import com.example.ui.theme.AmberWarning
 import com.example.ui.theme.BorderSubtle
 import com.example.ui.theme.CoralMistake
@@ -62,7 +75,6 @@ import com.example.ui.theme.ElectricCyan
 import com.example.ui.theme.ElevatedCardSurface
 import com.example.ui.theme.EmeraldTelemetry
 import com.example.ui.theme.ObsidianBackground
-import com.example.ui.theme.PurpleNeural
 import com.example.ui.theme.SlateSurface
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -115,34 +127,22 @@ fun ResearchLabScreen(
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // Target Game Selector
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                GameType.entries.forEach { game ->
-                    FilterChip(
-                        selected = game == selectedGame,
-                        onClick = { viewModel.selectGame(game) },
-                        label = { Text(game.title, style = MaterialTheme.typography.labelMedium) },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = ElectricCyan.copy(alpha = 0.22f),
-                            selectedLabelColor = ElectricCyan
-                        ),
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-            }
+            // Accessible Target Game Selector
+            GameSelectorBar(
+                selectedGame = selectedGame,
+                onSelectGame = { viewModel.selectGame(it) }
+            )
 
             Spacer(modifier = Modifier.height(12.dp))
 
             // Curated External Knowledge Dossiers (Wikis, Strategy Guides, Video Transcripts)
             Card(
                 colors = CardDefaults.cardColors(containerColor = SlateSurface),
+                border = BorderStroke(1.dp, BorderSubtle),
                 shape = RoundedCornerShape(18.dp),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .border(1.dp, BorderSubtle, RoundedCornerShape(18.dp))
+                    .animateContentSize(tween(240, easing = FastOutSlowInEasing))
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text(
@@ -154,15 +154,26 @@ fun ResearchLabScreen(
 
                     curatedForGame.forEach { source ->
                         val isSelected = customTitle == source.title
+                        val sourceBg by animateColorAsState(
+                            targetValue = if (isSelected) ElectricCyan.copy(alpha = 0.14f) else ObsidianBackground,
+                            animationSpec = tween(180),
+                            label = "curated_bg_${source.id}"
+                        )
+                        val sourceBorder by animateColorAsState(
+                            targetValue = if (isSelected) ElectricCyan else BorderSubtle,
+                            animationSpec = tween(180),
+                            label = "curated_border_${source.id}"
+                        )
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(vertical = 4.dp)
+                                .heightIn(min = 48.dp)
                                 .clip(RoundedCornerShape(12.dp))
-                                .background(if (isSelected) ElectricCyan.copy(alpha = 0.14f) else ObsidianBackground)
+                                .background(sourceBg)
                                 .border(
                                     width = 1.dp,
-                                    color = if (isSelected) ElectricCyan else BorderSubtle,
+                                    color = sourceBorder,
                                     shape = RoundedCornerShape(12.dp)
                                 )
                                 .clickable {
@@ -270,8 +281,9 @@ fun ResearchLabScreen(
                                 contentColor = Color(0xFF001F26)
                             ),
                             shape = RoundedCornerShape(14.dp),
+                            contentPadding = PaddingValues(horizontal = 12.dp),
                             modifier = Modifier
-                                .weight(1.3f)
+                                .weight(1.35f)
                                 .height(50.dp)
                                 .testTag("synthesize_research_button")
                         ) {
@@ -282,20 +294,21 @@ fun ResearchLabScreen(
                                     strokeWidth = 2.dp
                                 )
                                 Spacer(modifier = Modifier.width(8.dp))
-                                Text("RESEARCHING...", style = MaterialTheme.typography.labelLarge)
+                                Text("RESEARCHING...", style = MaterialTheme.typography.labelLarge, maxLines = 1)
                             } else {
                                 Icon(
                                     imageVector = Icons.Default.AutoAwesome,
                                     contentDescription = "Synthesize Strategy"
                                 )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text("SYNTHESIZE & LEARN", style = MaterialTheme.typography.labelLarge)
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("SYNTHESIZE", style = MaterialTheme.typography.labelLarge, maxLines = 1)
                             }
                         }
 
                         OutlinedButton(
                             onClick = onLaunchGameAfterResearch,
                             shape = RoundedCornerShape(14.dp),
+                            contentPadding = PaddingValues(horizontal = 12.dp),
                             modifier = Modifier
                                 .weight(1f)
                                 .height(50.dp)
@@ -307,28 +320,37 @@ fun ResearchLabScreen(
                                 tint = EmeraldTelemetry
                             )
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text("PLAY GAME", style = MaterialTheme.typography.labelLarge)
+                            Text("PLAY GAME", style = MaterialTheme.typography.labelLarge, maxLines = 1)
                         }
                     }
 
-                    when (val task = aiTaskState) {
-                        is AiTaskState.Error -> {
-                            Spacer(modifier = Modifier.height(10.dp))
-                            Text(
-                                text = task.errorMessage,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = CoralMistake
-                            )
+                    AnimatedContent(
+                        targetState = aiTaskState,
+                        transitionSpec = {
+                            (fadeIn(tween(200)) + expandVertically(tween(220))) togetherWith
+                                (fadeOut(tween(140)) + shrinkVertically(tween(160)))
+                        },
+                        label = "research_lab_ai_task_state"
+                    ) { task ->
+                        when (task) {
+                            is AiTaskState.Error -> {
+                                Text(
+                                    text = task.errorMessage,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = CoralMistake,
+                                    modifier = Modifier.padding(top = 10.dp)
+                                )
+                            }
+                            is AiTaskState.Success -> {
+                                Text(
+                                    text = task.message,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = EmeraldTelemetry,
+                                    modifier = Modifier.padding(top = 10.dp)
+                                )
+                            }
+                            else -> Spacer(modifier = Modifier.height(0.dp))
                         }
-                        is AiTaskState.Success -> {
-                            Spacer(modifier = Modifier.height(10.dp))
-                            Text(
-                                text = task.message,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = EmeraldTelemetry
-                            )
-                        }
-                        else -> Unit
                     }
                 }
             }
@@ -343,38 +365,48 @@ fun ResearchLabScreen(
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            if (gameResearchDocs.isEmpty()) {
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = SlateSurface),
-                    shape = RoundedCornerShape(16.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(
-                        modifier = Modifier.padding(20.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
+            AnimatedContent(
+                targetState = gameResearchDocs.isEmpty(),
+                transitionSpec = {
+                    fadeIn(tween(220)) togetherWith fadeOut(tween(150))
+                },
+                label = "research_dossiers_list_transition"
+            ) { isEmpty ->
+                if (isEmpty) {
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = SlateSurface),
+                        border = BorderStroke(1.dp, BorderSubtle),
+                        shape = RoundedCornerShape(16.dp),
+                        modifier = Modifier.fillMaxWidth()
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.MenuBook,
-                            contentDescription = "No research yet",
-                            tint = AmberWarning,
-                            modifier = Modifier.size(32.dp)
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = "No Pre-Game Research Synthesized Yet",
-                            style = MaterialTheme.typography.titleMedium
-                        )
-                        Text(
-                            text = "Select one of the curated game wikis or strategy guides above and tap SYNTHESIZE & LEARN so the AI studies the game before playing.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                        Column(
+                            modifier = Modifier.padding(20.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.MenuBook,
+                                contentDescription = "No research yet",
+                                tint = AmberWarning,
+                                modifier = Modifier.size(32.dp)
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = "No Pre-Game Research Synthesized Yet",
+                                style = MaterialTheme.typography.titleMedium
+                            )
+                            Text(
+                                text = "Select one of the curated game wikis or strategy guides above and tap SYNTHESIZE so the AI studies the game before playing.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     }
-                }
-            } else {
-                gameResearchDocs.forEach { doc ->
-                    ResearchDossierCard(doc = doc)
-                    Spacer(modifier = Modifier.height(10.dp))
+                } else {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        gameResearchDocs.forEach { doc ->
+                            ResearchDossierCard(doc = doc)
+                        }
+                    }
                 }
             }
 

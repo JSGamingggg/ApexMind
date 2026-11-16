@@ -5,9 +5,17 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -19,9 +27,11 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -38,6 +48,7 @@ import androidx.compose.material.icons.outlined.SportsEsports
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -46,11 +57,13 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.NavigationRail
 import androidx.compose.material3.NavigationRailItem
+import androidx.compose.material3.NavigationRailItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -61,10 +74,12 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.credentials.CredentialManager
 import androidx.lifecycle.ViewModelProvider.AndroidViewModelFactory.Companion.APPLICATION_KEY
@@ -84,9 +99,11 @@ import com.example.ui.screens.MemoryVaultScreen
 import com.example.ui.screens.ResearchLabScreen
 import com.example.ui.theme.BorderSubtle
 import com.example.ui.theme.ElectricCyan
+import com.example.ui.theme.EmeraldTelemetry
 import com.example.ui.theme.MyApplicationTheme
 import com.example.ui.theme.ObsidianBackground
 import com.example.ui.theme.SlateSurface
+import com.example.ui.theme.TextSecondary
 import com.google.firebase.Firebase
 import com.google.firebase.FirebaseApp
 import com.google.firebase.auth.FirebaseAuth
@@ -141,17 +158,26 @@ fun AppNavigation() {
     }
 
     val currentUser by firebaseAuth.authStateFlow().collectAsStateWithLifecycle(initialValue = firebaseAuth.currentUser)
-    val user = currentUser
 
-    if (user == null) {
-        AuthScreen(onAuthSuccess = {})
-    } else {
-        val uid = user.uid
-        key(uid) {
-            ApexMindMainShell(
-                currentUserId = uid,
-                userEmail = user.email ?: "Operator"
-            )
+    AnimatedContent(
+        targetState = currentUser,
+        transitionSpec = {
+            fadeIn(tween(240, easing = FastOutSlowInEasing)) togetherWith
+                fadeOut(tween(180))
+        },
+        contentKey = { it?.uid },
+        label = "auth_gate_transition"
+    ) { user ->
+        if (user == null) {
+            AuthScreen(onAuthSuccess = {})
+        } else {
+            val uid = user.uid
+            key(uid) {
+                ApexMindMainShell(
+                    currentUserId = uid,
+                    userEmail = user.email ?: "Operator"
+                )
+            }
         }
     }
 }
@@ -268,73 +294,95 @@ fun ApexMindMainShell(
             contentWindowInsets = WindowInsets.safeDrawing,
             containerColor = ObsidianBackground,
             topBar = {
-                TopAppBar(
-                    title = {
-                        Column {
-                            Text(
-                                text = stringResource(R.string.app_name),
-                                style = MaterialTheme.typography.titleLarge,
-                                color = ElectricCyan
-                            )
-                            Text(
-                                text = "AGENT ID // $userEmail",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    },
-                    actions = {
-                        IconButton(
-                            onClick = {
-                                signOutUser(
-                                    credentialManager = credentialManager,
-                                    scope = scope
+                Column {
+                    TopAppBar(
+                        title = {
+                            Column {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(8.dp)
+                                            .clip(CircleShape)
+                                            .background(EmeraldTelemetry)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = stringResource(R.string.app_name),
+                                        style = MaterialTheme.typography.titleLarge,
+                                        color = ElectricCyan
+                                    )
+                                }
+                                Text(
+                                    text = "NEURAL ENGINE • $userEmail",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
                                 )
-                            },
-                            modifier = Modifier.testTag("sign_out_button")
-                        ) {
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.Logout,
-                                contentDescription = "Sign Out",
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    },
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = SlateSurface
+                            }
+                        },
+                        actions = {
+                            IconButton(
+                                onClick = {
+                                    signOutUser(
+                                        credentialManager = credentialManager,
+                                        scope = scope
+                                    )
+                                },
+                                modifier = Modifier.testTag("sign_out_button")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.Logout,
+                                    contentDescription = "Sign Out",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        },
+                        colors = TopAppBarDefaults.topAppBarColors(
+                            containerColor = SlateSurface
+                        )
                     )
-                )
+                    HorizontalDivider(color = BorderSubtle.copy(alpha = 0.7f))
+                }
             },
             bottomBar = {
                 if (!isWideScreen) {
-                    NavigationBar(
-                        containerColor = SlateSurface
-                    ) {
-                        ApexDestination.entries.forEach { dest ->
-                            val selected = currentTab == dest
-                            NavigationBarItem(
-                                selected = selected,
-                                onClick = { currentTab = dest },
-                                icon = {
-                                    Icon(
-                                        imageVector = if (selected) dest.selectedIcon else dest.unselectedIcon,
-                                        contentDescription = stringResource(dest.labelRes),
-                                        modifier = Modifier.size(22.dp)
-                                    )
-                                },
-                                label = {
-                                    Text(
-                                        text = stringResource(dest.labelRes),
-                                        style = MaterialTheme.typography.labelSmall
-                                    )
-                                },
-                                colors = NavigationBarItemDefaults.colors(
-                                    selectedIconColor = ObsidianBackground,
-                                    selectedTextColor = ElectricCyan,
-                                    indicatorColor = ElectricCyan
-                                ),
-                                modifier = Modifier.testTag("nav_${dest.route}")
-                            )
+                    Column {
+                        HorizontalDivider(color = BorderSubtle.copy(alpha = 0.7f))
+                        NavigationBar(
+                            containerColor = SlateSurface,
+                            tonalElevation = 0.dp
+                        ) {
+                            ApexDestination.entries.forEach { dest ->
+                                val selected = currentTab == dest
+                                NavigationBarItem(
+                                    selected = selected,
+                                    onClick = { currentTab = dest },
+                                    icon = {
+                                        Icon(
+                                            imageVector = if (selected) dest.selectedIcon else dest.unselectedIcon,
+                                            contentDescription = stringResource(dest.labelRes),
+                                            modifier = Modifier.size(22.dp)
+                                        )
+                                    },
+                                    label = {
+                                        Text(
+                                            text = stringResource(dest.labelRes),
+                                            style = MaterialTheme.typography.labelSmall,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    },
+                                    colors = NavigationBarItemDefaults.colors(
+                                        selectedIconColor = ElectricCyan,
+                                        selectedTextColor = ElectricCyan,
+                                        unselectedIconColor = TextSecondary,
+                                        unselectedTextColor = TextSecondary,
+                                        indicatorColor = ElectricCyan.copy(alpha = 0.16f)
+                                    ),
+                                    modifier = Modifier.testTag("nav_${dest.route}")
+                                )
+                            }
                         }
                     }
                 }
@@ -349,6 +397,7 @@ fun ApexMindMainShell(
                     NavigationRail(
                         containerColor = SlateSurface
                     ) {
+                        Spacer(modifier = Modifier.height(8.dp))
                         ApexDestination.entries.forEach { dest ->
                             val selected = currentTab == dest
                             NavigationRailItem(
@@ -366,18 +415,35 @@ fun ApexMindMainShell(
                                         style = MaterialTheme.typography.labelSmall
                                     )
                                 },
+                                colors = NavigationRailItemDefaults.colors(
+                                    selectedIconColor = ElectricCyan,
+                                    selectedTextColor = ElectricCyan,
+                                    unselectedIconColor = TextSecondary,
+                                    unselectedTextColor = TextSecondary,
+                                    indicatorColor = ElectricCyan.copy(alpha = 0.16f)
+                                ),
                                 modifier = Modifier.testTag("rail_${dest.route}")
                             )
                         }
                     }
+                    VerticalDivider(color = BorderSubtle.copy(alpha = 0.7f))
                 }
 
-                Column(
+                AnimatedContent(
+                    targetState = currentTab,
+                    transitionSpec = {
+                        (fadeIn(animationSpec = tween(220, easing = FastOutSlowInEasing)) +
+                            slideInVertically(
+                                animationSpec = tween(220, easing = FastOutSlowInEasing),
+                                initialOffsetY = { it / 28 }
+                            )) togetherWith fadeOut(animationSpec = tween(140))
+                    },
+                    label = "main_tab_transition",
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxWidth()
-                ) {
-                    when (currentTab) {
+                ) { tab ->
+                    when (tab) {
                         ApexDestination.ARENA -> ArenaScreen(
                             viewModel = viewModel,
                             onNavigateToResearch = { currentTab = ApexDestination.RESEARCH },
