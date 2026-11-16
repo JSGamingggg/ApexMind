@@ -16,18 +16,28 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up JDK 17
+      - name: Set up JDK 21
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: 17
+          java-version: '21'
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Accept Android SDK licenses
+      - name: Accept Android SDK licenses and install required SDK packages
         run: |
-          yes | "${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null 2>&1 || true
+          SDK_MANAGER="$(command -v sdkmanager || true)"
+          if [ -z "$SDK_MANAGER" ] && [ -n "${ANDROID_HOME:-}" ]; then
+            SDK_MANAGER="$(find "${ANDROID_HOME}/cmdline-tools" -name sdkmanager -type f 2>/dev/null | head -n 1 || true)"
+          fi
+          if [ -z "$SDK_MANAGER" ] && [ -n "${ANDROID_SDK_ROOT:-}" ]; then
+            SDK_MANAGER="$(find "${ANDROID_SDK_ROOT}/cmdline-tools" -name sdkmanager -type f 2>/dev/null | head -n 1 || true)"
+          fi
+          if [ -n "$SDK_MANAGER" ]; then
+            yes | "$SDK_MANAGER" --licenses > /dev/null 2>&1 || true
+            "$SDK_MANAGER" "platforms;android-36.1" "build-tools;36.0.0" || true
+          fi
 
       - name: Decode debug keystore from base64
         run: |
@@ -35,14 +45,19 @@ jobs:
             base64 -d debug.keystore.base64 > debug.keystore
           fi
 
-      - name: Ensure gradlew is executable
-        run: chmod +x gradlew
-
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.3.1'
 
       - name: Build Debug APK
-        run: ./gradlew assembleDebug --no-daemon --stacktrace
+        run: |
+          if [ -f ./gradlew ] && [ -f gradle/wrapper/gradle-wrapper.jar ]; then
+            chmod +x ./gradlew
+            ./gradlew assembleDebug --no-daemon --stacktrace -Dorg.gradle.jvmargs=-Xmx3g
+          else
+            gradle assembleDebug --no-daemon --stacktrace -Dorg.gradle.jvmargs=-Xmx3g
+          fi
 
       - name: Verify Debug APK output
         run: |
@@ -55,18 +70,29 @@ jobs:
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
 
-      - name: Build Signed Release APK (when release secrets are configured)
-        if: ${{ secrets.RELEASE_KEYSTORE_BASE64 != '' && secrets.STORE_PASSWORD != '' && secrets.KEY_PASSWORD != '' }}
+      - name: Build Signed Release APK (optional, if secrets configured)
+        id: release_build
         env:
+          RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
           STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
           KEYSTORE_PATH: ${{ github.workspace }}/my-upload-key.jks
         run: |
-          echo "${{ secrets.RELEASE_KEYSTORE_BASE64 }}" | base64 -d > "${KEYSTORE_PATH}"
-          ./gradlew assembleRelease --no-daemon --stacktrace
+          if [ -n "$RELEASE_KEYSTORE_BASE64" ] && [ -n "$STORE_PASSWORD" ] && [ -n "$KEY_PASSWORD" ]; then
+            echo "$RELEASE_KEYSTORE_BASE64" | base64 -d > "$KEYSTORE_PATH"
+            if [ -f ./gradlew ] && [ -f gradle/wrapper/gradle-wrapper.jar ]; then
+              ./gradlew assembleRelease --no-daemon --stacktrace -Dorg.gradle.jvmargs=-Xmx3g
+            else
+              gradle assembleRelease --no-daemon --stacktrace -Dorg.gradle.jvmargs=-Xmx3g
+            fi
+            echo "built=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Skipping signed release APK (release secrets not set)."
+            echo "built=false" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Upload Release APK artifact
-        if: ${{ secrets.RELEASE_KEYSTORE_BASE64 != '' && secrets.STORE_PASSWORD != '' && secrets.KEY_PASSWORD != '' }}
+        if: steps.release_build.outputs.built == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: ApexMind-release-apk
